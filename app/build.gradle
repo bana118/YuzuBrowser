@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@
 
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
 apply plugin: 'kotlin-kapt'
-apply plugin: 'io.fabric'
-apply plugin: 'com.cookpad.android.licensetools'
+apply plugin: 'dagger.hilt.android.plugin'
+apply plugin: 'com.cookpad.android.plugin.license-tools'
+apply plugin: 'com.google.gms.google-services'
+apply plugin: 'com.google.firebase.crashlytics'
 
 def gitHash = 'git rev-parse --short HEAD'.execute([], project.rootDir).text.trim()
 def buildTime = new Date().format("yyyy-MM-dd'T'HH:mm:ssXXX")
@@ -46,12 +47,16 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
 
     buildTypes {
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            manifestPlaceholders = [crashlyticsCollectionEnabled:"true"]
             lintOptions {
                 disable 'MissingTranslation', 'GoogleAppIndexingWarning', 'ClickableViewAccessibility'
             }
@@ -61,6 +66,7 @@ android {
             ext.alwaysUpdateBuildId = false
             applicationIdSuffix ".debug"
             resValue "string", "package_name", "${defaultConfig.applicationId}.debug"
+            manifestPlaceholders = [crashlyticsCollectionEnabled:"false"]
         }
     }
     packagingOptions {
@@ -83,29 +89,31 @@ android {
         }
     }
 
-    dataBinding {
-        enabled = true
+    buildFeatures {
+        dataBinding true
     }
 }
 
-androidExtensions {
-    experimental = true
+// must be after the plugin is applied otherwise no tasks will be found
+android.applicationVariants.all { variant ->
+    def googleTask = tasks.findByName("process${variant.name.capitalize()}GoogleServices")
+    googleTask.enabled = "debug" != variant.name
 }
 
 buildscript {
     repositories {
         maven { url 'https://maven.fabric.io/public' }
+        maven { url "https://plugins.gradle.org/m2/" }
         jcenter()
     }
 
     dependencies {
-        classpath 'io.fabric.tools:gradle:1.30.0'
-        classpath 'com.cookpad.android.licensetools:license-tools-plugin:1.7.0'
+        classpath 'io.fabric.tools:gradle:1.31.2'
+        classpath 'gradle.plugin.com.cookpad.android.plugin:plugin:1.2.6'
     }
 }
 
 repositories {
-    maven { url 'https://maven.fabric.io/public' }
     maven { url 'https://jitpack.io' }
     mavenCentral()
 }
@@ -115,35 +123,39 @@ dependencies {
     testImplementation Libs.junit
     androidTestImplementation Libs.espressoCore
 
-    implementation Libs.kotshi
-    kapt Libs.kotshi_compiler
+    implementation Libs.moshi
+    kapt Libs.moshiCodeGen
     implementation Libs.okhttp
 
     implementation AndroidX.appcompat
     implementation AndroidX.fix_preference
     implementation AndroidX.room
-    implementation ('com.crashlytics.sdk.android:crashlytics:2.10.1@aar') {
-        transitive = true
-    }
+    implementation AndroidX.documentFile
+    implementation AndroidX.design
+    implementation project(':libraries:asyncpermissions')
     implementation project(':browser')
-    implementation project(':ui')
+    implementation project(':module:ui')
     implementation project(':legacy')
-    implementation project(':core')
-    implementation project(':webview')
+    implementation project(':module:core')
+    implementation project(':module:webview')
     implementation project(':languages')
-    implementation project(':favicon')
-    implementation project(':download')
-    implementation project(':adblock')
-    implementation project(':bookmark')
-    implementation project(':history')
-    implementation project(':search')
+    implementation project(':module:favicon')
+    implementation project(':module:download')
+    implementation project(':module:adblock')
+    implementation project(':module:bookmark')
+    implementation project(':module:history')
+    implementation project(':module:search')
 
     implementation Libs.kotlin_stdlib
 
-    implementation Libs.dagger2
-    annotationProcessor Libs.dagger2_compiler
-    kapt Libs.dagger2_compiler
-    implementation Libs.dagger_android
-    implementation Libs.dagger_android_support
-    kapt Libs.dagger_android_processor
+    implementation Dagger.hilt
+    kapt Dagger.hiltCompiler
+
+    // Import the BoM for the Firebase platform
+    implementation platform('com.google.firebase:firebase-bom:26.5.0')
+
+    // Declare the dependencies for the Crashlytics and Analytics libraries
+    // When using the BoM, you don't specify versions in Firebase library dependencies
+    implementation 'com.google.firebase:firebase-crashlytics-ktx'
+    implementation 'com.google.firebase:firebase-analytics-ktx'
 }

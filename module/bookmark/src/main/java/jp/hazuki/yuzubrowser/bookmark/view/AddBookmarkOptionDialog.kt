@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,12 +18,11 @@ package jp.hazuki.yuzubrowser.bookmark.view
 
 import android.app.AlertDialog
 import android.app.Dialog
-import android.content.Intent
 import android.os.Bundle
 import androidx.fragment.app.DialogFragment
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import jp.hazuki.bookmark.R
 import jp.hazuki.yuzubrowser.bookmark.repository.BookmarkManager
+import jp.hazuki.yuzubrowser.core.eventbus.LocalEventBus
 import jp.hazuki.yuzubrowser.ui.BROADCAST_ACTION_NOTIFY_CHANGE_WEB_STATE
 
 class AddBookmarkOptionDialog : DialogFragment() {
@@ -44,19 +43,22 @@ class AddBookmarkOptionDialog : DialogFragment() {
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
-        val arguments = arguments ?: throw IllegalArgumentException()
+        val arguments = requireArguments()
         return AlertDialog.Builder(requireActivity()).apply {
             setTitle(R.string.bookmark)
             setItems(R.array.add_bookmark_option) { _, i ->
                 when (i) {
-                    0 -> AddBookmarkSiteDialog(requireActivity(), arguments.getString(ARG_TITLE), arguments.getString(ARG_URL)).show()
+                    0 -> AddBookmarkSiteDialog(
+                        requireActivity(),
+                        arguments.getString(ARG_TITLE)!!,
+                        arguments.getString(ARG_URL)!!,
+                    ).show()
                     1 -> {
                         BookmarkManager.getInstance(requireActivity()).run {
-                            removeAll(arguments.getString(ARG_URL))
+                            removeAll(arguments.getString(ARG_URL)!!)
                             save()
                         }
-                        LocalBroadcastManager.getInstance(requireActivity())
-                            .sendBroadcast(Intent(BROADCAST_ACTION_NOTIFY_CHANGE_WEB_STATE))
+                        LocalEventBus.getDefault().notify(BROADCAST_ACTION_NOTIFY_CHANGE_WEB_STATE)
                     }
                 }
             }

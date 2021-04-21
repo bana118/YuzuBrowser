@@ -17,14 +17,13 @@
 package jp.hazuki.yuzubrowser.ui.app
 
 import android.annotation.SuppressLint
-import android.annotation.TargetApi
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Configuration
-import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import jp.hazuki.yuzubrowser.core.utility.utils.createLanguageConfig
+import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import jp.hazuki.yuzubrowser.ui.theme.ThemeData
 
 @SuppressLint("Registered")
@@ -36,9 +35,9 @@ open class ThemeActivity : AppCompatActivity() {
             ThemeData.createInstance(application, PrefPool.getSharedPref(application).getString(theme_setting, ThemeData.THEME_LIGHT))
         }
 
-        val config = newBase.createLanguageConfig(PrefPool.getSharedPref(application).getString(language, ""))
-
         val isLightMode = isLightMode()
+        val config = newBase.createLanguageConfig(AppPrefs.language.get())
+
         applyThemeMode(isLightMode)
         config.updateTheme(isLightMode)
 
@@ -77,7 +76,6 @@ open class ThemeActivity : AppCompatActivity() {
             return baseActivityContext.getSystemService(name)
         }
 
-        @TargetApi(Build.VERSION_CODES.M)
         override fun getSystemServiceName(serviceClass: Class<*>): String? {
             return baseActivityContext.getSystemServiceName(serviceClass)
         }

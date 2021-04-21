@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2020 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.preference.Preference
+import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
-import com.takisoft.preferencex.PreferenceFragmentCompat
 import jp.hazuki.yuzubrowser.ui.PREFERENCE_FILE_NAME
 import jp.hazuki.yuzubrowser.ui.R
 
@@ -33,7 +34,7 @@ abstract class YuzuBasePreferenceFragment : PreferenceFragmentCompat() {
 
     abstract fun onCreateYuzuPreferences(savedInstanceState: Bundle?, rootKey: String?)
 
-    override fun onCreatePreferencesFix(savedInstanceState: Bundle?, rootKey: String?) {
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.sharedPreferencesName = PREFERENCE_FILE_NAME
         onCreateYuzuPreferences(savedInstanceState, rootKey)
     }
@@ -57,8 +58,9 @@ abstract class YuzuBasePreferenceFragment : PreferenceFragmentCompat() {
         val activity = activity ?: return
 
         preferenceScreen?.run {
-            val key: String? = arguments?.getString(ARG_PREFERENCE_ROOT)
-            val title = if (!TextUtils.isEmpty(key)) findPreference(key).title else title
+            val key = arguments?.getString(ARG_PREFERENCE_ROOT)
+            val title = if (!key.isNullOrEmpty()) findPreference<Preference>(key)?.title
+                ?: title else title
             activity.title = if (TextUtils.isEmpty(title)) getText(R.string.pref_settings) else title
         }
     }
@@ -74,4 +76,11 @@ abstract class YuzuBasePreferenceFragment : PreferenceFragmentCompat() {
     }
 
     open fun onPreferenceStartScreen(pref: PreferenceScreen): Boolean = false
+
+    protected fun openFragment(fragment: PreferenceFragmentCompat) {
+        requireActivity().supportFragmentManager.beginTransaction()
+            .replace(R.id.container, fragment)
+            .addToBackStack(null)
+            .commit()
+    }
 }

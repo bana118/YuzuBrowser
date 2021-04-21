@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,33 +16,26 @@
 
 package jp.hazuki.yuzubrowser
 
+import android.app.Application
 import android.content.Context
+import android.content.ContextWrapper
 import android.webkit.WebView
 import androidx.appcompat.app.AppCompatDelegate
-import androidx.fragment.app.Fragment
-import com.crashlytics.android.Crashlytics
-import com.crashlytics.android.answers.Answers
-import com.crashlytics.android.core.CrashlyticsCore
 import com.squareup.moshi.Moshi
-import dagger.android.AndroidInjector
-import dagger.android.DaggerApplication
-import dagger.android.DispatchingAndroidInjector
-import dagger.android.support.HasSupportFragmentInjector
-import io.fabric.sdk.android.Fabric
+import dagger.hilt.android.HiltAndroidApp
 import jp.hazuki.yuzubrowser.adblock.registerAdBlockNotification
 import jp.hazuki.yuzubrowser.adblock.repository.abp.AbpDatabase
 import jp.hazuki.yuzubrowser.core.utility.log.Logger
-import jp.hazuki.yuzubrowser.di.DaggerAppComponent
+import jp.hazuki.yuzubrowser.core.utility.utils.createLanguageConfig
 import jp.hazuki.yuzubrowser.download.registerDownloadNotification
 import jp.hazuki.yuzubrowser.legacy.settings.data.AppData
-import jp.hazuki.yuzubrowser.legacy.utils.CrashlyticsUtils
 import jp.hazuki.yuzubrowser.provider.ProviderManager
 import jp.hazuki.yuzubrowser.ui.BrowserApplication
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import javax.inject.Inject
 
-
-class YuzuBrowserApplication : DaggerApplication(), BrowserApplication, HasSupportFragmentInjector {
+@HiltAndroidApp
+class YuzuBrowserApplication : Application(), BrowserApplication {
 
     override val applicationId = BuildConfig.APPLICATION_ID
     override val permissionAppSignature = PERMISSION_MYAPP_SIGNATURE
@@ -50,21 +43,15 @@ class YuzuBrowserApplication : DaggerApplication(), BrowserApplication, HasSuppo
     override val providerManager = ProviderManager()
     override val context: Context
         get() = this
-    @Inject
-    lateinit var dispatchingAndroidFragmentInjector: DispatchingAndroidInjector<Fragment>
+
     @Inject
     override lateinit var moshi: Moshi
+
     @Inject
     lateinit var abpDatabase: AbpDatabase
 
     override fun onCreate() {
         super.onCreate()
-        val crashlytics = Crashlytics.Builder()
-                .core(CrashlyticsCore.Builder().disabled(BuildConfig.DEBUG).build())
-                .build()
-        Fabric.with(this, crashlytics, Answers())
-        CrashlyticsUtils.setChromeVersion(this)
-        CrashlyticsUtils.setWebViewMode()
         registerDownloadNotification()
         registerAdBlockNotification()
 
@@ -79,14 +66,30 @@ class YuzuBrowserApplication : DaggerApplication(), BrowserApplication, HasSuppo
         Logger.isDebug = BuildConfig.DEBUG
     }
 
-    override fun supportFragmentInjector(): AndroidInjector<Fragment> {
-        return dispatchingAndroidFragmentInjector
+    override fun attachBaseContext(base: Context) {
+        val lang = AppPrefs.language.get()
+        val context = if (lang != "") {
+            val config = base.createLanguageConfig(lang)
+            ContextCompat(base.createConfigurationContext(config), base)
+        } else {
+            base
+        }
+
+        super.attachBaseContext(context)
     }
 
-    override fun applicationInjector(): AndroidInjector<out DaggerApplication> {
-        val appComponent = DaggerAppComponent.builder().application(this).build()
-        appComponent.inject(this)
-        return appComponent
+    private class ContextCompat(
+        configContext: Context,
+        private val baseActivityContext: Context
+    ) : ContextWrapper(configContext) {
+
+        override fun getSystemService(name: String): Any? {
+            return baseActivityContext.getSystemService(name)
+        }
+
+        override fun getSystemServiceName(serviceClass: Class<*>): String? {
+            return baseActivityContext.getSystemServiceName(serviceClass)
+        }
     }
 
     companion object {

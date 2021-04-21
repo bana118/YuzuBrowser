@@ -177,13 +177,6 @@
     <string name="pref_lpress_others">Outros</string>
     <string name="pref_clear_data_at_finish">Limpar dados ao finalizar</string>
     <string name="pref_security_settings">Configurações de segurança</string>
-    <string name="pref_file_access">Configurações de acesso de arquivos locais</string>
-
-    <string-array name="pref_file_access_list">
-        <item>Desativar (mais seguro)</item>
-        <item>Ativar na sandbox (seguro)</item>
-        <item>Ativar (não seguro)</item>
-    </string-array>
 
     <string name="pref_mixed_content">Configurações de conteúdo inseguro no https</string>
 
@@ -448,7 +441,6 @@
     <string name="pref_privacy_policy">Política de Privacidade</string>
     <string name="mining_protect">Nenhuma moeda</string>
     <string name="mining_protect_summary">Proteção de mineração de criptomoeda</string>
-    <string name="pref_storage_location_warn">Este local de armazenamento pode não funcionar corretamente com outros apps.</string>
     <string name="pref_fake_chrome">Disfarçado como Chrome</string>
     <string name="pref_fake_chrome_summary">Representar agente do usuário padrão como Chrome</string>
     <string name="pref_toolbar_small_icon">Mostrar ícone pressionado longo</string>

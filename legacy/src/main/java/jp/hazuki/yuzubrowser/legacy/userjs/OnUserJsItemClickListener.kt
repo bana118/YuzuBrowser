@@ -16,10 +16,8 @@
 
 package jp.hazuki.yuzubrowser.legacy.userjs
 
-import android.view.View
-
 import jp.hazuki.yuzubrowser.ui.widget.recycler.OnRecyclerListener
 
 interface OnUserJsItemClickListener : OnRecyclerListener {
-    fun onInfoButtonClick(v: View?, index: Int)
+    fun onInfoButtonClick(index: Int)
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,14 +16,16 @@
 
 package jp.hazuki.yuzubrowser.browser
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.AlertDialog
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.res.AssetManager
 import android.content.res.Configuration
 import android.content.res.Resources
 import android.gesture.GestureOverlayView
+import android.graphics.Color
 import android.media.AudioManager
 import android.os.*
 import android.print.PrintManager
@@ -35,10 +37,13 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.app.ActivityCompat
 import androidx.documentfile.provider.DocumentFile
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.google.android.material.appbar.AppBarLayout
 import com.squareup.moshi.Moshi
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.asyncpermissions.AsyncPermissions
+import jp.hazuki.asyncpermissions.PermissionResult
 import jp.hazuki.yuzubrowser.adblock.BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA
 import jp.hazuki.yuzubrowser.adblock.filter.abp.checkNeedUpdate
 import jp.hazuki.yuzubrowser.adblock.repository.abp.AbpDatabase
@@ -49,22 +54,26 @@ import jp.hazuki.yuzubrowser.browser.behavior.BottomBarBehavior
 import jp.hazuki.yuzubrowser.browser.behavior.WebViewBehavior
 import jp.hazuki.yuzubrowser.browser.connecter.openable.BrowserOpenable
 import jp.hazuki.yuzubrowser.browser.connecter.openable.forEach
+import jp.hazuki.yuzubrowser.browser.databinding.BrowserActivityBinding
 import jp.hazuki.yuzubrowser.browser.manager.UserActionManager
 import jp.hazuki.yuzubrowser.browser.tab.TabManagerFactory
 import jp.hazuki.yuzubrowser.browser.view.Toolbar
+import jp.hazuki.yuzubrowser.core.eventbus.LocalEventBus
 import jp.hazuki.yuzubrowser.core.utility.extensions.appCacheFilePath
-import jp.hazuki.yuzubrowser.core.utility.extensions.getFakeChromeUserAgent
+import jp.hazuki.yuzubrowser.core.utility.extensions.getRealUserAgent
+import jp.hazuki.yuzubrowser.core.utility.extensions.getResColor
 import jp.hazuki.yuzubrowser.core.utility.log.ErrorReport
 import jp.hazuki.yuzubrowser.core.utility.log.Logger
 import jp.hazuki.yuzubrowser.core.utility.utils.ui
 import jp.hazuki.yuzubrowser.download.core.data.DownloadFile
+import jp.hazuki.yuzubrowser.download.repository.DownloadsDao
 import jp.hazuki.yuzubrowser.download.ui.FastDownloadActivity
 import jp.hazuki.yuzubrowser.download.ui.fragment.SaveWebArchiveDialog
 import jp.hazuki.yuzubrowser.favicon.FaviconManager
 import jp.hazuki.yuzubrowser.history.repository.BrowserHistoryManager
 import jp.hazuki.yuzubrowser.legacy.Constants
 import jp.hazuki.yuzubrowser.legacy.action.Action
-import jp.hazuki.yuzubrowser.legacy.action.ActionNameArray
+import jp.hazuki.yuzubrowser.legacy.action.ActionNameMap
 import jp.hazuki.yuzubrowser.legacy.action.item.AutoPageScrollAction
 import jp.hazuki.yuzubrowser.legacy.action.item.OpenOptionsMenuAction
 import jp.hazuki.yuzubrowser.legacy.action.item.TabListSingleAction
@@ -86,24 +95,20 @@ import jp.hazuki.yuzubrowser.legacy.toolbar.ToolbarManager
 import jp.hazuki.yuzubrowser.legacy.toolbar.sub.WebViewFindDialog
 import jp.hazuki.yuzubrowser.legacy.toolbar.sub.WebViewFindDialogFactory
 import jp.hazuki.yuzubrowser.legacy.toolbar.sub.WebViewPageFastScroller
-import jp.hazuki.yuzubrowser.legacy.utils.CrashlyticsUtils
 import jp.hazuki.yuzubrowser.legacy.utils.DisplayUtils
 import jp.hazuki.yuzubrowser.legacy.utils.WebUtils
 import jp.hazuki.yuzubrowser.legacy.utils.extensions.saveArchive
 import jp.hazuki.yuzubrowser.legacy.utils.network.ConnectionStateMonitor
-import jp.hazuki.yuzubrowser.legacy.webkit.TabType
-import jp.hazuki.yuzubrowser.legacy.webkit.WebCustomViewHandler
-import jp.hazuki.yuzubrowser.legacy.webkit.WebViewAutoScrollManager
-import jp.hazuki.yuzubrowser.legacy.webkit.WebViewProxy
+import jp.hazuki.yuzubrowser.legacy.webkit.*
+import jp.hazuki.yuzubrowser.legacy.webrtc.WebPermissionsDao
 import jp.hazuki.yuzubrowser.legacy.webrtc.WebRtcPermissionHandler
 import jp.hazuki.yuzubrowser.legacy.webrtc.core.WebRtcRequest
 import jp.hazuki.yuzubrowser.search.presentation.search.SearchActivity
 import jp.hazuki.yuzubrowser.ui.*
-import jp.hazuki.yuzubrowser.ui.extensions.createIntentFilter
+import jp.hazuki.yuzubrowser.ui.app.SystemUiController
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import jp.hazuki.yuzubrowser.ui.theme.ThemeData
-import jp.hazuki.yuzubrowser.ui.utils.makeUrl
-import jp.hazuki.yuzubrowser.ui.utils.makeUrlFromQuery
+import jp.hazuki.yuzubrowser.ui.utils.*
 import jp.hazuki.yuzubrowser.ui.widget.PointerView
 import jp.hazuki.yuzubrowser.webview.CustomWebHistoryItem
 import jp.hazuki.yuzubrowser.webview.CustomWebView
@@ -111,12 +116,16 @@ import jp.hazuki.yuzubrowser.webview.WebViewFactory
 import jp.hazuki.yuzubrowser.webview.WebViewType
 import jp.hazuki.yuzubrowser.webview.listener.OnScrollChangedListener
 import jp.hazuki.yuzubrowser.webview.listener.OnScrollableChangeListener
-import kotlinx.android.synthetic.main.browser_activity.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.util.*
 import javax.inject.Inject
 import kotlin.random.Random
 
+@AndroidEntryPoint
 class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDialog.OnFinishDialogCallBack, AddAdBlockDialog.OnAdBlockListUpdateListener, WebRtcRequest, SaveWebArchiveDialog.OnSaveWebViewListener, WebViewProvider {
 
     private lateinit var asyncPermissions: AsyncPermissions
@@ -159,18 +168,20 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         }
     }
 
-    private val scrollChangedListener: OnScrollChangedListener = { webView: CustomWebView, l: Int, t: Int, oldl: Int, oldt: Int ->
-        webViewFastScroller.onPageScroll()
-        webViewPageFastScroller?.onScrollWebView(webView)
-        if (!bottomAlwaysOverlayToolbarPadding.forceHide) {
-            val padding = if (bottomAlwaysOverlayToolbarPadding.visible) bottomAlwaysOverlayToolbar.height else 0
-            if (t + webView.computeVerticalScrollExtentMethod() + padding > webView.verticalScrollRange - bottomAlwaysOverlayToolbar.height - scrollSlop) {
-                if (!bottomAlwaysOverlayToolbarPadding.visible) {
-                    bottomAlwaysOverlayToolbarPadding.visible = true
-                    bottomAlwaysOverlayToolbarPadding.height = bottomAlwaysOverlayToolbar.height
+    private val scrollChangedListener: OnScrollChangedListener = { webView, _, t, _, _ ->
+        binding.apply {
+            webViewFastScroller.onPageScroll()
+            webViewPageFastScroller?.onScrollWebView(webView)
+            if (!bottomAlwaysOverlayToolbarPadding.forceHide) {
+                val padding = if (bottomAlwaysOverlayToolbarPadding.visible) bottomAlwaysOverlayToolbar.height else 0
+                if (t + webView.computeVerticalScrollExtentMethod() + padding > webView.verticalScrollRange - bottomAlwaysOverlayToolbar.height - scrollSlop) {
+                    if (!bottomAlwaysOverlayToolbarPadding.visible) {
+                        bottomAlwaysOverlayToolbarPadding.visible = true
+                        bottomAlwaysOverlayToolbarPadding.height = bottomAlwaysOverlayToolbar.height
+                    }
+                } else {
+                    bottomAlwaysOverlayToolbarPadding.visible = false
                 }
-            } else {
-                bottomAlwaysOverlayToolbarPadding.visible = false
             }
         }
     }
@@ -183,13 +194,13 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     private lateinit var bottomBarBehavior: BottomBarBehavior
     private lateinit var webClient: WebClient
     private lateinit var menuWindow: MenuWindow
+    private lateinit var uiController: SystemUiController
     private var scrollSlop: Int = 0
 
     private var isActivityDestroyed = false
     private var isResumed = false
     override var isActivityPaused: Boolean = true
         private set
-    private var forceDestroy: Boolean = false
 
     private var closedTabs: ArrayDeque<Bundle>? = null
     private var webViewFindDialog: WebViewFindDialog? = null
@@ -206,21 +217,36 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     @Inject
     internal lateinit var webViewFactory: WebViewFactory
+
     @Inject
     internal lateinit var moshi: Moshi
+
     @Inject
     internal lateinit var abpDatabase: AbpDatabase
+
     @Inject
     internal lateinit var faviconManager: FaviconManager
+
     @Inject
     internal lateinit var okHttp: OkHttpClient
 
+    @Inject
+    internal lateinit var downloadsDao: DownloadsDao
+
+    @Inject
+    internal lateinit var webPermissionsDao: WebPermissionsDao
+
+    private lateinit var binding: BrowserActivityBinding
+
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.browser_activity)
+        binding = BrowserActivityBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+        uiController = SystemUiController.create(window)
         //Crash workaround for pagePaddingHeight...
-        toolbarPadding.visibility = View.GONE
+        binding.toolbarPadding.visibility = View.GONE
 
         actionController = ActionExecutor(this, faviconManager)
         browserState = (applicationContext as BrowserApplication).browserState
@@ -230,16 +256,21 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             browserState.isNeedLoad = false
         }
 
+        if (AppPrefs.safe_browsing.get() &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.START_SAFE_BROWSING)) {
+            WebViewCompat.startSafeBrowsing(applicationContext, null)
+        }
+
         userActionManager = UserActionManager(this, this, actionController, iconManager)
         tabManagerIn = BrowserTabManager(TabManagerFactory.newInstance(this, webViewFactory, faviconManager), this)
-        webClient = WebClient(this, this, abpDatabase, faviconManager)
+        webClient = WebClient(this, this, abpDatabase, webPermissionsDao, faviconManager)
 
-        toolbar = Toolbar(this, superFrameLayoutInfo, this, actionController, iconManager)
+        toolbar = Toolbar(this, binding, this, actionController, iconManager)
         toolbar.addToolbarView(resources)
 
-        webViewBehavior = (webGestureOverlayView.layoutParams as CoordinatorLayout.LayoutParams).behavior as WebViewBehavior
-        bottomBarBehavior = (bottomOverlayLayout.layoutParams as CoordinatorLayout.LayoutParams).behavior as BottomBarBehavior
-        superFrameLayout.setOnImeShownListener { visible ->
+        webViewBehavior = (binding.webGestureOverlayView.layoutParams as CoordinatorLayout.LayoutParams).behavior as WebViewBehavior
+        bottomBarBehavior = (binding.bottomOverlayLayout.layoutParams as CoordinatorLayout.LayoutParams).behavior as BottomBarBehavior
+        binding.superFrameLayout.setOnImeShownListener { visible ->
             if (isImeShown != visible) {
                 isImeShown = visible
                 webViewBehavior.isImeShown = visible
@@ -250,22 +281,41 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
                 }
                 toolbar.onImeChanged(visible)
 
-                if (!visible && isFullscreenMode) {
-                    window.decorView.systemUiVisibility = DisplayUtils.getFullScreenVisibility()
+                if (!visible) {
+                    uiController.apply {
+                        barState = getScreenState()
+                        updateConfigure()
+                    }
                 }
             }
         }
-        topToolbar.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+        binding.topToolbar.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
-                topToolbar.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                coordinator.setToolbarHeight(topToolbar.height)
+                binding.topToolbar.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                binding.coordinator.setToolbarHeight(binding.topToolbar.height)
                 tabManager.onLayoutCreated()
-                bottomAlwaysOverlayToolbarPadding.height = bottomAlwaysOverlayToolbar.height
+                binding.bottomAlwaysOverlayToolbarPadding.height = binding.bottomAlwaysOverlayToolbar.height
             }
         })
 
-        webViewFastScroller.attachAppBarLayout(coordinator, appbar)
-        webGestureOverlayView.setWebFrame(appbar)
+        binding.pullToRefresh.apply {
+            setOnChildScrollUpCallback { _, _ ->
+                val tab = tabManagerIn.currentTabData ?: return@setOnChildScrollUpCallback true
+                !(tab.mWebView?.canPullToRefresh ?: false) || !tab.isFinished
+            }
+            setOnRefreshListener {
+                ui {
+                    tabManagerIn.currentTabData?.apply {
+                        mWebView.reload()
+                        delay(RELOAD_ICON_TIME_LIMIT)
+                    }
+                    binding.pullToRefresh.isRefreshing = false
+                }
+            }
+        }
+
+        binding.webViewFastScroller.attachAppBarLayout(binding.coordinator, binding.appbar)
+        binding.webGestureOverlayView.setWebFrame(binding.appbar)
 
         onPreferenceReset()
 
@@ -293,9 +343,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
         webViewBehavior.setController(this)
 
-        window.decorView.setOnSystemUiVisibilityChangeListener { setFullscreenIfEnable() }
-
-        webGestureOverlayView.setOnTouchListener { _, event ->
+        binding.webGestureOverlayView.setOnTouchListener { _, event ->
             if (event.actionMasked == MotionEvent.ACTION_UP) {
                 requestAdjustWebView()
             }
@@ -321,8 +369,13 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         }
 
 
-        WebViewProxy.setProxy(applicationContext, AppPrefs.proxy_set.get(), AppPrefs.proxy_address.get(),
-            AppPrefs.proxy_https_set.get(), AppPrefs.proxy_https_address.get())
+        if (AppPrefs.proxy_set.get()) {
+            val http = AppPrefs.proxy_address.get()
+            val https = if (AppPrefs.proxy_https_set.get()) AppPrefs.proxy_https_address.get() else null
+            WebViewProxy.setProxy(http, https)
+        } else {
+            WebViewProxy.clearProxy()
+        }
 
         connectionStateMonitor.enable(this)
 
@@ -331,10 +384,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             setCurrentTab(tabManagerIn.currentTabNo)
         }
 
-        LocalBroadcastManager.getInstance(this)
-            .registerReceiver(localReceiver, createIntentFilter(
-                BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA,
-                BROADCAST_ACTION_NOTIFY_CHANGE_WEB_STATE))
+        LocalEventBus.getDefault().observe(this, this::onNotifyEvent)
 
         delayAction?.let {
             actionController.run(it)
@@ -371,15 +421,15 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     override fun onStop() {
         super.onStop()
-        webClient.onStop()
         tabListView?.closeSnackBar()
 
         tabManagerIn.saveData()
         handler.removeCallbacks(saveTabsRunnable)
         faviconManager.save()
 
-        LocalBroadcastManager.getInstance(this)
-            .unregisterReceiver(localReceiver)
+        GlobalScope.launch(Dispatchers.IO) {
+            CookieManager.getInstance().flush()
+        }
 
         if (isActivityPaused) {
             Logger.w(TAG, "Activity is already stopped")
@@ -396,7 +446,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             }
         }
 
-        WebViewProxy.resetProxy(applicationContext)
+        WebViewProxy.clearProxy()
 
         connectionStateMonitor.disable(this)
     }
@@ -405,8 +455,6 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         Logger.d(TAG, "onDestroy()")
         super.onDestroy()
         destroy()
-        if (forceDestroy)
-            Process.killProcess(Process.myPid())
     }
 
     private fun destroy() {
@@ -417,8 +465,8 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             hideCustomView(this@BrowserActivity)
             webCustomViewHandler = null
         }
-        webFrameLayout.removeAllViews()
-        webGestureOverlayView.removeAllViews()
+        binding.webFrameLayout.removeAllViews()
+        binding.webGestureOverlayView.removeAllViews()
         tabManagerIn.destroy()
         webClient.destroy()
         isActivityDestroyed = true
@@ -431,8 +479,19 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     }
 
     private fun setFullscreenIfEnable() {
-        if (isFullscreenMode) {
-            window.decorView.systemUiVisibility = DisplayUtils.getFullScreenVisibility()
+        uiController.barState = getScreenState()
+        uiController.updateConfigure()
+    }
+
+    private fun getScreenState(): SystemUiController.State {
+        return if (isFullscreenMode) {
+            when (AppPrefs.fullscreen_hide_mode.get()) {
+                1 -> SystemUiController.State.HIDE_NAVIGATION_BAR
+                2 -> SystemUiController.State.HIDE_ALL_BAR
+                else -> SystemUiController.State.HIDE_STATUS_BAR
+            }
+        } else {
+            SystemUiController.State.NORMAL
         }
     }
 
@@ -479,24 +538,28 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             BrowserController.REQUEST_WEB_UPLOAD -> webClient.webUploadResult(resultCode, data)
             BrowserController.REQUEST_SEARCHBOX -> {
                 if (resultCode != RESULT_OK || data == null) return
-                val query = data.getStringExtra(SearchActivity.EXTRA_QUERY)
-                val searchUrl = data.getStringExtra(SearchActivity.EXTRA_SEARCH_URL)
+                val query = data.getStringExtra(SearchActivity.EXTRA_QUERY)!!
+                val searchUrl = data.getStringExtra(SearchActivity.EXTRA_SEARCH_URL)!!
 
                 if (TextUtils.isEmpty(query)) return
 
-                val url: String
-                url = when (data.getIntExtra(SearchActivity.EXTRA_SEARCH_MODE, SearchActivity.SEARCH_MODE_AUTO)) {
+                val url = when (data.getIntExtra(SearchActivity.EXTRA_SEARCH_MODE, SearchActivity.SEARCH_MODE_AUTO)) {
                     SearchActivity.SEARCH_MODE_URL -> query.makeUrl()
                     SearchActivity.SEARCH_MODE_WORD -> WebUtils.makeSearchUrlFromQuery(query, searchUrl, "%s")
                     else -> query.makeUrlFromQuery(searchUrl, "%s")
                 }
-                val appdata = data.getBundleExtra(SearchActivity.EXTRA_APP_DATA)
+                val appdata = data.getBundleExtra(SearchActivity.EXTRA_APP_DATA)!!
                 val target = appdata.getInt(EXTRA_DATA_TARGET, -1)
                 val tab = tabManagerIn.get(target)
-                if (data.getBooleanExtra(SearchActivity.EXTRA_OPEN_NEW_TAB, false) || tab == null)
+                if (tab == null) {
                     openInNewTab(url, TabType.DEFAULT)
-                else
-                    loadUrl(tab, url)
+                } else {
+                    when (data.getIntExtra(SearchActivity.EXTRA_OPEN_NEW_TAB, 0)) {
+                        SearchActivity.TAB_TYPE_CURRENT -> loadUrl(tab, url)
+                        SearchActivity.TAB_TYPE_NEW_TAB -> openInNewTab(url, TabType.DEFAULT)
+                        SearchActivity.TAB_TYPE_NEW_RIGHT_TAB -> openInRightNewTab(url, TabType.WINDOW)
+                    }
+                }
             }
             BrowserController.REQUEST_BOOKMARK, BrowserController.REQUEST_HISTORY -> {
                 if (resultCode != RESULT_OK || data == null) return
@@ -505,26 +568,21 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
                 openable.forEach { loadUrl(it, openable.target) }
             }
             BrowserController.REQUEST_SETTING -> {
-                if (data?.getBooleanExtra(INTENT_EXTRA_RESTART, false) == true) {
-                    forceDestroy = data.getBooleanExtra(Constants.intent.EXTRA_FORCE_DESTROY, false)
-                    restartBrowser()
-                } else {
-                    AppData.init(applicationContext, moshi, abpDatabase)
-                    onPreferenceReset()
-                }
+                AppData.init(applicationContext, moshi, abpDatabase)
+                onPreferenceReset()
             }
             BrowserController.REQUEST_USERAGENT -> {
                 if (resultCode != RESULT_OK || data == null) return
                 val ua = data.getStringExtra(Intent.EXTRA_TEXT)
                 val tab = tabManagerIn.currentTabData
-                tab.mWebView.webSettings.userAgentString = if (ua.isNullOrEmpty() && AppPrefs.fake_chrome.get()) getFakeChromeUserAgent() else ua
+                tab.mWebView.webSettings.userAgentString = getRealUserAgent(ua, AppPrefs.fake_chrome.get())
                 tab.mWebView.reload()
             }
             BrowserController.REQUEST_DEFAULT_USERAGENT -> {
                 if (resultCode != RESULT_OK || data == null) return
                 val ua = data.getStringExtra(Intent.EXTRA_TEXT)
                 AppPrefs.user_agent.set(ua)
-                val browserUA = if (ua.isNullOrEmpty() && AppPrefs.fake_chrome.get()) getFakeChromeUserAgent() else ua
+                val browserUA = getRealUserAgent(ua, AppPrefs.fake_chrome.get())
                 AppPrefs.commit(this, AppPrefs.user_agent)
                 for (tabData in tabManagerIn.loadedData) {
                     tabData.mWebView.webSettings.userAgentString = browserUA
@@ -628,11 +686,11 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         } else if (webCustomViewHandler?.isCustomViewShowing == true) {
             webCustomViewHandler!!.hideCustomView(this)
         } else if (subGestureView != null) {
-            superFrameLayout.removeView(subGestureView)
+            binding.superFrameLayout.removeView(subGestureView)
             subGestureView = null
         } else if (mouseCursorView?.backFinish == true) {
             mouseCursorView!!.setView(null)
-            webFrameLayout.removeView(mouseCursorView)
+            binding.webFrameLayout.removeView(mouseCursorView)
             mouseCursorView = null
         } else if (tabListView != null) {
             tabListView!!.close()
@@ -665,10 +723,14 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     override fun adjustBrowserPadding(tab: MainTabData) {
         val mode = tab.mWebView.isInvertMode
-        toolbarPadding.setBlackColorMode(mode)
-        bottomAlwaysOverlayToolbarPadding.setBlackColorMode(mode)
+        binding.toolbarPadding.setBlackColorMode(mode)
+        binding.bottomAlwaysOverlayToolbarPadding.setBlackColorMode(mode)
 
-        webViewBehavior.adjustWebView(tab, topToolbar.height + bottomOverlayLayout.height)
+        webViewBehavior.adjustWebView(tab, binding.topToolbar.height + binding.bottomOverlayLayout.height)
+    }
+
+    override fun onPageFinished() {
+        binding.pullToRefresh.isRefreshing = false
     }
 
     private fun handleIntent(intent: Intent?): Boolean {
@@ -678,7 +740,6 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         setIntent(Intent())
         if (action == null) return false
         if (Constants.intent.ACTION_FINISH == action) {
-            forceDestroy = intent.getBooleanExtra(Constants.intent.EXTRA_FORCE_DESTROY, false)
             restartBrowser()
             return false
         }
@@ -722,12 +783,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         }
     }
 
-    private fun onPreferenceReset() {
-        toolbar.onPreferenceReset()
-        tabManagerIn.onPreferenceReset()
-        userActionManager.onPreferenceReset()
-        CrashlyticsUtils.setWebViewMode()
-
+    private fun initTheme() {
         ThemeData.createInstanceIfNeed(applicationContext, AppPrefs.theme_setting.get())?.let { themeData ->
             toolbar.onThemeChanged(themeData)
             userActionManager.onThemeChanged(themeData)
@@ -735,20 +791,57 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
             if (themeData.statusBarColor != 0) {
                 window.run {
-                    clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                        @Suppress("DEPRECATION")
+                        clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+                    }
                     addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-                    statusBarColor = themeData.statusBarColor
-                    decorView.systemUiVisibility = ThemeData.getSystemUiVisibilityFlag()
+                    uiController.statusBarColor = themeData.statusBarColor
+                    uiController.isLightStatusBar = themeData.isLightStatusBar
                 }
             }
 
+            val navigationColorType = AppPrefs.navigationBarColorType.get()
+
+            val navigationBarColor = when (navigationColorType) {
+                0 -> {
+                    if (themeData.toolbarBackgroundColor != 0) {
+                        themeData.toolbarBackgroundColor
+                    } else {
+                        getResColor(R.color.deep_gray)
+                    }
+                }
+                1 -> if (themeData.statusBarColor != 0) themeData.statusBarColor else Color.BLACK
+                2 -> Color.BLACK
+                else -> throw IllegalStateException("navigation color type is invalid")
+            }
+
+            uiController.navigationBarColor = navigationBarColor
+            uiController.isLightNavigationBar = when (navigationColorType) {
+                0 -> ThemeData.isColorLight(navigationBarColor)
+                1 -> themeData.isLightStatusBar
+                2 -> false
+                else -> throw IllegalStateException("navigation color type is invalid")
+            }
+
             if (themeData.scrollbarAccentColor != 0) {
-                webViewFastScroller.handlePressedColor = themeData.scrollbarAccentColor
+                binding.webViewFastScroller.handlePressedColor = themeData.scrollbarAccentColor
             } else if (themeData.tabAccentColor != 0) {
-                webViewFastScroller.handlePressedColor = themeData.tabAccentColor
+                binding.webViewFastScroller.handlePressedColor = themeData.tabAccentColor
             }
         }
-        superFrameLayout.setWhiteBackgroundMode(AppPrefs.whiteBackground.get())
+
+        uiController.updateConfigure()
+    }
+
+    private fun onPreferenceReset() {
+        toolbar.onPreferenceReset()
+        tabManagerIn.onPreferenceReset()
+        userActionManager.onPreferenceReset()
+
+        initTheme()
+
+        binding.superFrameLayout.setWhiteBackgroundMode(AppPrefs.whiteBackground.get())
 
         menuWindow = MenuWindow(this, MenuActionManager.getInstance(applicationContext).browser_activity.list, actionController, iconManager)
 
@@ -757,7 +850,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         requestedOrientation = AppPrefs.oritentation.get()
         isFullscreenMode = AppPrefs.fullscreen.get()
         isEnableMultiFingerGesture = AppPrefs.multi_finger_gesture.get()
-        userActionManager.setEnableGesture(webGestureOverlayView)
+        userActionManager.setEnableGesture(binding.webGestureOverlayView)
 
         if (AppPrefs.keep_screen_on.get())
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -766,10 +859,10 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
         val touchScrollbar = AppPrefs.touch_scrollbar.get()
         if (touchScrollbar >= 0) {
-            webViewFastScroller.setScrollEnabled(true)
-            webViewFastScroller.isShowLeft = touchScrollbar == 1
+            binding.webViewFastScroller.setScrollEnabled(true)
+            binding.webViewFastScroller.isShowLeft = touchScrollbar == 1
         } else {
-            webViewFastScroller.setScrollEnabled(false)
+            binding.webViewFastScroller.setScrollEnabled(false)
         }
 
         ErrorReport.setDetailedLog(AppPrefs.detailed_log.get())
@@ -800,18 +893,18 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             mWebView.setOnMyCreateContextMenuListener(null)
             mWebView.setWebViewTouchDetector(null)
             mWebView.scrollableChangeListener = null
-            webFrameLayout.removeView(mWebView.view)
+            binding.webFrameLayout.removeView(mWebView.view)
             webViewBehavior.setWebView(null)
-            webViewFastScroller.detachWebView()
+            binding.webViewFastScroller.detachWebView()
         }
 
         newTab.mWebView.let {
             it.resumeTimers()
             it.onResume()
             (it.view.parent as? ViewGroup)?.removeView(it.view)
-            webFrameLayout.addView(it.view, 0)
+            binding.webFrameLayout.addView(it.view, 0)
             webViewBehavior.setWebView(it)
-            webViewFastScroller.attachWebView(it)
+            binding.webViewFastScroller.attachWebView(it)
 
             it.setOnMyCreateContextMenuListener(userActionManager.onCreateContextMenuListener)
             //TODO Rewrite
@@ -850,6 +943,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         }
 
         val oldWeb = oldData.mWebView
+        oldWeb.onPause()
 
         if (AppPrefs.save_closed_tab.get()) {
             val outState = Bundle()
@@ -911,7 +1005,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             setTabManager(tabManagerIn)
             setCallback(object : TabListLayout.Callback {
                 override fun requestTabListClose() {
-                    superFrameLayout.removeView(tabListView)
+                    binding.superFrameLayout.removeView(tabListView)
                     tabListView = null
                 }
 
@@ -956,7 +1050,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
                 }
             })
         }
-        superFrameLayout.addView(tabListView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        binding.superFrameLayout.addView(tabListView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     override fun showTabHistory(target: Int) {
@@ -980,9 +1074,9 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         val listView = ListView(this).also { it.adapter = adapter }
 
         val dialog = AlertDialog.Builder(this)
-                .setTitle(R.string.tab_history)
-                .setView(listView)
-                .create()
+            .setTitle(R.string.tab_history)
+            .setView(listView)
+            .create()
 
         listView.setOnItemClickListener { _, _, position, _ ->
             val next = position - historyList.current
@@ -1017,7 +1111,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         }
     }
 
-    override fun showSearchBox(query: String, target: Int, openNewTab: Boolean, reverse: Boolean) {
+    override fun showSearchBox(query: String, target: Int, openTabType: Int, reverse: Boolean) {
         val data = Bundle().apply {
             putInt(EXTRA_DATA_TARGET, target)
         }
@@ -1028,7 +1122,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
             putExtra(SearchActivity.EXTRA_REVERSE, reverse)
             putExtra(SearchActivity.EXTRA_APP_DATA, data)
-            putExtra(SearchActivity.EXTRA_OPEN_NEW_TAB, openNewTab)
+            putExtra(SearchActivity.EXTRA_OPEN_NEW_TAB, openTabType)
         }
 
         startActivity(intent, BrowserController.REQUEST_SEARCHBOX)
@@ -1045,26 +1139,26 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             addOnGesturePerformedListener { _, gesture ->
                 manager.recognize(gesture)?.let {
                     actionController.run(it)
-                    superFrameLayout.removeView(subGestureView)
+                    binding.superFrameLayout.removeView(subGestureView)
                     subGestureView = null
                 }
             }
         }
 
-        superFrameLayout.addView(subGestureView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        binding.superFrameLayout.addView(subGestureView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
     }
 
     override fun showMenu(button: View?, action: OpenOptionsMenuAction) {
         if (button != null) {
             menuWindow.showAsDropDown(button)
         } else {
-            menuWindow.show(superFrameLayout, action.gravity)
+            menuWindow.show(binding.superFrameLayout, action.gravity)
         }
     }
 
     override fun showCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
         if (webCustomViewHandler == null) {
-            webCustomViewHandler = WebCustomViewHandler(fullscreenLayout)
+            webCustomViewHandler = WebCustomViewHandler(binding.fullscreenLayout)
         }
         webCustomViewHandler!!.showCustomView(this, view, AppPrefs.web_customview_oritentation.get(), callback)
     }
@@ -1093,11 +1187,11 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     override fun finishAlert(clearTabNo: Int) {
         FinishAlertDialog(this)
-                .setPositiveButton(android.R.string.yes)
-                .setNegativeButton(android.R.string.no)
-                .setNeutralButton(R.string.minimize)
-                .setClearTabNo(clearTabNo)
-                .show(supportFragmentManager)
+            .setPositiveButton(android.R.string.ok)
+            .setNegativeButton(android.R.string.cancel)
+            .setNeutralButton(R.string.minimize)
+            .setClearTabNo(clearTabNo)
+            .show(supportFragmentManager)
     }
 
     override fun onFinishPositiveButtonClicked(clearTabNo: Int, newSetting: Int) {
@@ -1341,7 +1435,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     override fun addBookmark(tab: MainTabData) {
         showAddBookmarkDialog(this, supportFragmentManager, tab.title,
-                tab.url ?: tab.mWebView.url ?: "")
+            tab.url ?: tab.mWebView.url ?: "")
     }
 
     override fun savePage(tab: MainTabData) {
@@ -1349,7 +1443,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     }
 
     override fun onSaveWebViewToFile(root: DocumentFile, file: DownloadFile, webViewNo: Int) {
-        tabManagerIn[webViewNo].mWebView.saveArchive(root, file)
+        tabManagerIn[webViewNo].mWebView.saveArchive(downloadsDao, root, file)
     }
 
     override fun startActivity(intent: Intent, @RequestCause cause: Int) {
@@ -1358,13 +1452,15 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     override fun showActionName(text: String?) {
         if (text != null) {
-            actionNameTextView.visibility = View.VISIBLE
-            actionNameTextView.text = text
+            binding.actionNameTextView.also {
+                it.visibility = View.VISIBLE
+                it.text = text
+            }
         }
     }
 
     override fun hideActionName() {
-        actionNameTextView.visibility = View.GONE
+        binding.actionNameTextView.visibility = View.GONE
     }
 
     override val resourcesByInfo: Resources
@@ -1382,10 +1478,10 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         get() = tabManagerIn
 
     override val appBarLayout: AppBarLayout
-        get() = appbar
+        get() = binding.appbar
 
     override val superFrameLayoutInfo: CoordinatorLayout
-        get() = superFrameLayout
+        get() = binding.superFrameLayout
 
     override val activity: AppCompatActivity
         get() = this
@@ -1393,7 +1489,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     override val toolbarManager: ToolbarManager
         get() = toolbar
 
-    override val actionNameArray: ActionNameArray by lazy { ActionNameArray(this) }
+    override val actionNameArray by lazy { ActionNameMap(resources) }
 
     override var requestedOrientationByCtrl: Int
         get() = requestedOrientation
@@ -1412,8 +1508,10 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     }
 
     override val pagePaddingHeight: Int
-        get() = topAlwaysToolbar.height + bottomAlwaysToolbar.height +
+        get() = binding.run {
+            topAlwaysToolbar.height + bottomAlwaysToolbar.height +
                 (if (toolbarPadding.visibility == View.VISIBLE) toolbarPadding.height else 0)
+        }
 
     override var isFullscreenMode: Boolean = false
         set(enable) {
@@ -1424,17 +1522,11 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             toolbar.onFullscreenChanged(enable)
 
             if (enable) {
-                val visibility = DisplayUtils.getFullScreenVisibility()
-                window.decorView.systemUiVisibility = visibility
-                menuWindow.setSystemUiVisibility(visibility)
-                if (DisplayUtils.isNeedFullScreenFlag())
-                    window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                uiController.barState = getScreenState()
             } else {
-                val flag = ThemeData.getSystemUiVisibilityFlag()
-                window.decorView.systemUiVisibility = flag
-                menuWindow.setSystemUiVisibility(flag)
-                window.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                uiController.barState = SystemUiController.State.NORMAL
             }
+            uiController.updateConfigureIfNeed()
         }
 
     override var isPrivateMode: Boolean = false
@@ -1516,7 +1608,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
             mouseCursorView = PointerView(this).apply {
                 backFinish = isBackFinish
                 setView(tabManagerIn.currentTabData.mWebView.view)
-                webFrameLayout.addView(this, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                binding.webFrameLayout.addView(this, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             }
         }
     }
@@ -1524,7 +1616,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     override fun closeMousePointer() {
         mouseCursorView?.run {
             setView(null)
-            webFrameLayout.removeView(this)
+            binding.webFrameLayout.removeView(this)
             mouseCursorView = null
         }
     }
@@ -1537,12 +1629,12 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
 
     override fun requestPagePermission(host: String, resources: Array<String>, onGrant: (Boolean) -> Unit) {
         AlertDialog.Builder(this)
-                .setTitle(R.string.permission_request)
-                .setMessage(getRequestRtcList(host, resources))
-                .setPositiveButton(R.string.allow) { _, _ -> onGrant(true) }
-                .setNegativeButton(R.string.block) { _, _ -> onGrant(false) }
-                .setOnCancelListener { onGrant(false) }
-                .show()
+            .setTitle(R.string.permission_request)
+            .setMessage(getRequestRtcList(host, resources))
+            .setPositiveButton(R.string.allow) { _, _ -> onGrant(true) }
+            .setNegativeButton(R.string.block) { _, _ -> onGrant(false) }
+            .setOnCancelListener { onGrant(false) }
+            .show()
     }
 
     private fun getRequestRtcList(host: String, resources: Array<String>): String {
@@ -1598,7 +1690,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
     override var isEnableQuickControl: Boolean
         get() = userActionManager.isPieEnabled
         set(value) {
-            userActionManager.setPieEnable(value, webFrameLayout)
+            userActionManager.setPieEnable(value, binding.webFrameLayout)
         }
 
     override var isEnableMultiFingerGesture: Boolean
@@ -1614,9 +1706,9 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         }
 
     override var isEnableGesture: Boolean
-        get() = webGestureOverlayView.isEnabled
+        get() = binding.webGestureOverlayView.isEnabled
         set(enable) {
-            webGestureOverlayView.isEnabled = enable
+            binding.webGestureOverlayView.isEnabled = enable
         }
 
     override val printManager: PrintManager
@@ -1630,12 +1722,50 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         return resources.assets
     }
 
-    private val localReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA -> webClient.updateAdBlockList()
-                BROADCAST_ACTION_NOTIFY_CHANGE_WEB_STATE -> notifyChangeWebState()
+    private fun onNotifyEvent(id: String) {
+        when (id) {
+            BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA -> webClient.updateAdBlockList()
+            BROADCAST_ACTION_NOTIFY_CHANGE_WEB_STATE -> notifyChangeWebState()
+        }
+    }
+
+    override suspend fun requestLocationPermission(): Boolean {
+        return handleLocationPermissionResult(
+            asyncPermissions.request(Manifest.permission.ACCESS_FINE_LOCATION)
+        )
+    }
+
+    private suspend fun handleLocationPermissionResult(result: PermissionResult): Boolean {
+        return when (result) {
+            is PermissionResult.Granted -> true
+            is PermissionResult.ShouldShowRationale -> {
+                return handleLocationPermissionResult(result.proceed())
             }
+            is PermissionResult.NeverAskAgain -> {
+                openRequestPermissionSettings(getString(R.string.request_permission_location_setting))
+                false
+            }
+            else -> false
+        }
+    }
+
+    override suspend fun requestStoragePermission(): Boolean {
+        return handleStoragePermissionResult(
+            asyncPermissions.request(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        )
+    }
+
+    private suspend fun handleStoragePermissionResult(result: PermissionResult): Boolean {
+        return when (result) {
+            is PermissionResult.Granted -> true
+            is PermissionResult.ShouldShowRationale -> {
+                return handleStoragePermissionResult(result.proceed())
+            }
+            is PermissionResult.NeverAskAgain -> {
+                openRequestPermissionSettings(getString(R.string.request_permission_storage_setting))
+                false
+            }
+            else -> false
         }
     }
 
@@ -1645,5 +1775,7 @@ class BrowserActivity : BrowserBaseActivity(), BrowserController, FinishAlertDia
         private const val EXTRA_DATA_TARGET = "BrowserActivity.target"
         const val EXTRA_WINDOW_MODE = "window_mode"
         const val EXTRA_SHOULD_OPEN_IN_NEW_TAB = "shouldOpenInNewTab"
+
+        private const val RELOAD_ICON_TIME_LIMIT = 2000L
     }
 }

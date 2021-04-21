@@ -25,12 +25,16 @@ import android.os.Bundle
 import android.webkit.WebSettings
 import androidx.fragment.app.DialogFragment
 import com.squareup.moshi.Moshi
-import dagger.android.support.AndroidSupportInjection
+import dagger.hilt.android.AndroidEntryPoint
+import jp.hazuki.yuzubrowser.core.USER_AGENT_PC
+import jp.hazuki.yuzubrowser.core.utility.extensions.getChromePcUserAgent
 import jp.hazuki.yuzubrowser.core.utility.extensions.getFakeChromeUserAgent
+import jp.hazuki.yuzubrowser.core.utility.extensions.getPcUserAgent
 import jp.hazuki.yuzubrowser.legacy.R
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import javax.inject.Inject
 
+@AndroidEntryPoint
 class UserAgentListDialog : DialogFragment() {
 
     @Inject
@@ -38,19 +42,23 @@ class UserAgentListDialog : DialogFragment() {
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
         val activity = activity ?: throw IllegalStateException()
-        AndroidSupportInjection.inject(this)
         val mUserAgentList = UserAgentList()
         mUserAgentList.read(activity, moshi)
 
         val entries = arrayOfNulls<String>(mUserAgentList.size + 1)
         val entryValues = arrayOfNulls<String>(mUserAgentList.size + 1)
 
-        val ua = arguments!!.getString(UA)
-        val defaultUserAgent = if (AppPrefs.fake_chrome.get()) activity.getFakeChromeUserAgent() else WebSettings.getDefaultUserAgent(activity)
+        var ua = requireArguments().getString(UA)
+        val isChrome = AppPrefs.fake_chrome.get()
+        val defaultUserAgent = if (isChrome) activity.getFakeChromeUserAgent() else WebSettings.getDefaultUserAgent(activity)
+        val pcUserAgent = if (isChrome) activity.getChromePcUserAgent() else activity.getPcUserAgent()
 
         var pos = if (ua.isNullOrEmpty() || defaultUserAgent == ua) 0 else -1
+        if (ua == pcUserAgent) {
+            ua = USER_AGENT_PC
+        }
 
-        entries[0] = context!!.getString(R.string.default_text)
+        entries[0] = activity.getString(R.string.default_text)
         entryValues[0] = defaultUserAgent
 
         var userAgent: UserAgent
@@ -68,13 +76,13 @@ class UserAgentListDialog : DialogFragment() {
 
         val builder = AlertDialog.Builder(activity)
         builder.setTitle(R.string.useragent)
-                .setSingleChoiceItems(entries, pos) { _, which ->
-                    val intent = Intent()
-                    intent.putExtra(Intent.EXTRA_TEXT, if (which == 0) "" else entryValues[which])
-                    activity.setResult(RESULT_OK, intent)
-                    dismiss()
-                }
-                .setNegativeButton(R.string.cancel, null)
+            .setSingleChoiceItems(entries, pos) { _, which ->
+                val intent = Intent()
+                intent.putExtra(Intent.EXTRA_TEXT, if (which == 0) "" else entryValues[which])
+                activity.setResult(RESULT_OK, intent)
+                dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
         return builder.create()
     }
 

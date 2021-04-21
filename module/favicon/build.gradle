@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
 apply plugin: 'kotlin-kapt'
 
 android {
-    compileSdkVersion 28
-
+    compileSdkVersion Build.compile_sdk_version
+    buildToolsVersion Build.build_tools_version
 
     defaultConfig {
         minSdkVersion Build.min_sdk_version
@@ -39,7 +38,6 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
-
 }
 
 dependencies {
@@ -53,15 +51,5 @@ dependencies {
     implementation Libs.kotlin_coroutines
     implementation Libs.kotlin_coroutines_android
 
-    implementation Libs.dagger2
-    annotationProcessor Libs.dagger2_compiler
-    kapt Libs.dagger2_compiler
-    implementation Libs.dagger_android
-    implementation Libs.dagger_android_support
-    kapt Libs.dagger_android_processor
-
-    implementation project(':core')
-}
-repositories {
-    mavenCentral()
+    implementation project(':module:core')
 }

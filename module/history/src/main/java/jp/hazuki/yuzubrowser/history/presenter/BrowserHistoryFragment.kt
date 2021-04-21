@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2020 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,9 +26,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
+import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import ca.barrenechea.widget.recyclerview.decoration.StickyHeaderDecoration
-import dagger.android.support.DaggerFragment
+import com.turingtechnologies.materialscrollbar.TouchScrollBar
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.bookmark.view.showAddBookmarkDialog
 import jp.hazuki.yuzubrowser.browser.connecter.openable.OpenUrl
 import jp.hazuki.yuzubrowser.browser.connecter.openable.OpenUrlList
@@ -38,17 +41,17 @@ import jp.hazuki.yuzubrowser.history.repository.BrowserHistoryModel
 import jp.hazuki.yuzubrowser.historyModel.R
 import jp.hazuki.yuzubrowser.ui.*
 import jp.hazuki.yuzubrowser.ui.extensions.addCallback
+import jp.hazuki.yuzubrowser.ui.extensions.applyIconColor
 import jp.hazuki.yuzubrowser.ui.extensions.setClipboardWithToast
+import jp.hazuki.yuzubrowser.ui.extensions.share
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import jp.hazuki.yuzubrowser.ui.widget.recycler.LoadMoreListener
 import jp.hazuki.yuzubrowser.ui.widget.recycler.RecyclerTouchLocationDetector
-import kotlinx.android.synthetic.main.fragment_history.*
-import org.jetbrains.anko.share
 import java.util.*
 import javax.inject.Inject
 
-
-class BrowserHistoryFragment : DaggerFragment(), BrowserHistoryAdapter.OnHistoryRecyclerListener, ActionMode.Callback {
+@AndroidEntryPoint
+class BrowserHistoryFragment : Fragment(), BrowserHistoryAdapter.OnHistoryRecyclerListener, ActionMode.Callback {
 
     private var pickMode: Boolean = false
     private lateinit var adapter: BrowserHistoryAdapter
@@ -70,6 +73,9 @@ class BrowserHistoryFragment : DaggerFragment(), BrowserHistoryAdapter.OnHistory
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val activity = requireActivity()
         val arguments = arguments ?: throw IllegalArgumentException()
+
+        val recyclerView = view.findViewById<RecyclerView>(R.id.recyclerView)
+        val touchScrollBar = view.findViewById<TouchScrollBar>(R.id.touchScrollBar)
 
         pickMode = arguments.getBoolean(PICK_MODE)
 
@@ -98,11 +104,10 @@ class BrowserHistoryFragment : DaggerFragment(), BrowserHistoryAdapter.OnHistory
         super.onActivityCreated(savedInstanceState)
         requireActivity().onBackPressedDispatcher.addCallback(this) {
             val searchView = searchView
-            return@addCallback if (searchView != null && !searchView.isIconified) {
+            if (searchView != null && !searchView.isIconified) {
                 searchView.isIconified = true
-                true
             } else {
-                false
+                requireActivity().finish()
             }
         }
     }
@@ -227,6 +232,7 @@ class BrowserHistoryFragment : DaggerFragment(), BrowserHistoryAdapter.OnHistory
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.history, menu)
+        applyIconColor(menu)
 
         val menuItem = menu.findItem(R.id.search_history)
 

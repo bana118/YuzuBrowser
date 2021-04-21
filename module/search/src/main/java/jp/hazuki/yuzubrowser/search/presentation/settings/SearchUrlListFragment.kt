@@ -20,42 +20,43 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.lifecycle.ViewModelProviders
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.snackbar.Snackbar
-import dagger.android.support.DaggerFragment
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.favicon.FaviconManager
 import jp.hazuki.yuzubrowser.search.R
 import jp.hazuki.yuzubrowser.search.databinding.SearchSettingsFragmentBinding
 import jp.hazuki.yuzubrowser.search.model.provider.SearchUrl
 import jp.hazuki.yuzubrowser.ui.dialog.DeleteDialogCompat
-import jp.hazuki.yuzubrowser.ui.extensions.get
-import jp.hazuki.yuzubrowser.ui.extensions.observe
 import jp.hazuki.yuzubrowser.ui.widget.recycler.RecyclerMenu
 import javax.inject.Inject
 
-class SearchUrlListFragment : DaggerFragment(), SearchSettingDialog.OnUrlEditedListener, RecyclerMenu.OnRecyclerMenuListener, DeleteDialogCompat.OnDelete, SearchUrlAdapter.OnSearchUrlClickListener {
+@AndroidEntryPoint
+class SearchUrlListFragment : Fragment(), SearchSettingDialog.OnUrlEditedListener, RecyclerMenu.OnRecyclerMenuListener, DeleteDialogCompat.OnDelete, SearchUrlAdapter.OnSearchUrlClickListener {
 
     private lateinit var binding: SearchSettingsFragmentBinding
-    private lateinit var viewModel: SearchSettingsViewModel
+    private val viewModel by viewModels<SearchSettingsViewModel>(factoryProducer = { factory })
+
     @Inject
     internal lateinit var factory: SearchSettingsViewModel.Factory
+
     @Inject
     internal lateinit var faviconManager: FaviconManager
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val activity = requireActivity()
 
-        viewModel = ViewModelProviders.of(this, factory).get()
-        viewModel.removedItem.observe(this) {
+        viewModel.removedItem.observe(viewLifecycleOwner) {
             Snackbar.make(binding.root, R.string.deleted, Snackbar.LENGTH_SHORT)
                 .setAction(R.string.undo) {
                     viewModel.resetRemovedItem()
                 }
                 .show()
         }
-        viewModel.onFabClick.observe(this) {
+        viewModel.onFabClick.observe(viewLifecycleOwner) {
             SearchSettingDialog.newInstance(-1, null).show(childFragmentManager, "edit")
         }
 

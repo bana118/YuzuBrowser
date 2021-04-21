@@ -16,11 +16,9 @@
 
 package jp.hazuki.yuzubrowser.webview
 
-import android.annotation.TargetApi
 import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
-import android.os.Build
 import android.os.Message
 import android.view.KeyEvent
 import android.webkit.*
@@ -65,6 +63,8 @@ open class CustomWebViewClient : WebViewClient() {
             onPageStarted(view as CustomWebView, url, favicon)
     }
 
+    open fun onDomContentLoaded(web: CustomWebView) {}
+
     open fun onPageChanged(web: CustomWebView, url: String, originalUrl: String, progress: Int, isLoading: Boolean) {}
 
     open fun onReceivedHttpAuthRequest(web: CustomWebView, handler: HttpAuthHandler, host: String, realm: String) {
@@ -98,7 +98,6 @@ open class CustomWebViewClient : WebViewClient() {
 
     open fun onReceivedError(view: CustomWebView, errorCode: Int, description: CharSequence, url: Uri) {}
 
-    @TargetApi(Build.VERSION_CODES.M)
     override fun onReceivedError(view: WebView?, request: WebResourceRequest, error: WebResourceError) {
         if (request.isForMainFrame && view is CustomWebView)
             onReceivedError(view as CustomWebView, error.errorCode, error.description, request.url)

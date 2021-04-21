@@ -20,18 +20,21 @@ import android.net.Uri
 import com.google.re2j.Pattern
 
 class Re2Filter(
-    private val regex: Pattern,
     filter: String,
     contentType: Int,
     ignoreCase: Boolean,
     domains: DomainMap?,
-    thirdParty: Int
+    thirdParty: Int,
 ) : UnifiedFilter(filter, contentType, ignoreCase, domains, thirdParty) {
+    private val regex = Pattern.compile(pattern, if (ignoreCase) Pattern.CASE_INSENSITIVE else 0)
 
-    override val type: Int
+    override val filterType: Int
         get() = FILTER_TYPE_RE2_REGEX
 
     override fun check(url: Uri): Boolean {
         return regex.matches(url.toString())
     }
+
+    override val isRegex: Boolean
+        get() = true
 }

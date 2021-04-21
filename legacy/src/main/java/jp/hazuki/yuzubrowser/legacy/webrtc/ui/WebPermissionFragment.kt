@@ -20,18 +20,24 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import dagger.hilt.android.AndroidEntryPoint
+import jp.hazuki.yuzubrowser.core.utility.utils.ui
 import jp.hazuki.yuzubrowser.legacy.R
-import jp.hazuki.yuzubrowser.legacy.webrtc.WebPermissionsDatabase
+import jp.hazuki.yuzubrowser.legacy.webrtc.WebPermissionsDao
 import jp.hazuki.yuzubrowser.legacy.webrtc.WebRtcPermission
 import jp.hazuki.yuzubrowser.legacy.webrtc.core.WebPermissions
 import jp.hazuki.yuzubrowser.ui.widget.recycler.DividerItemDecoration
 import jp.hazuki.yuzubrowser.ui.widget.recycler.OnRecyclerListener
-import kotlinx.android.extensions.CacheImplementation
-import kotlinx.android.extensions.ContainerOptions
-import kotlinx.android.synthetic.main.recycler_with_fab.*
+import javax.inject.Inject
 
-@ContainerOptions(CacheImplementation.NO_CACHE)
-class WebPermissionFragment : androidx.fragment.app.Fragment(), OnRecyclerListener, WebPermissionsEditDialog.OnPermissionEditedListener {
+@AndroidEntryPoint
+class WebPermissionFragment : Fragment(), OnRecyclerListener, WebPermissionsEditDialog.OnPermissionEditedListener {
+
+    @Inject
+    internal lateinit var webPermissionsDao: WebPermissionsDao
 
     private lateinit var adapter: WebPermissionAdapter
 
@@ -42,30 +48,33 @@ class WebPermissionFragment : androidx.fragment.app.Fragment(), OnRecyclerListen
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         val activity = activity ?: return
 
-        adapter = WebPermissionAdapter(activity,
-                WebPermissionsDatabase.getInstance(activity.applicationContext).getList().toMutableList(),
-                this)
+        adapter = WebPermissionAdapter(activity, this)
+        ui {
+            adapter.addAll(webPermissionsDao.getList())
+            adapter.notifyDataSetChanged()
+        }
 
-        recyclerView.run {
-            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(activity)
+        view.findViewById<RecyclerView>(R.id.recyclerView).run {
+            layoutManager = LinearLayoutManager(activity)
             addItemDecoration(DividerItemDecoration(activity))
             adapter = this@WebPermissionFragment.adapter
         }
     }
 
     override fun onRecyclerItemClicked(v: View, position: Int) {
-        val (host, permissions) = adapter[position]
-        WebPermissionsEditDialog(position, host, permissions)
-                .show(childFragmentManager, "edit")
+        val permissions = adapter[position]
+        WebPermissionsEditDialog(position, permissions)
+            .show(childFragmentManager, "edit")
     }
 
-    override fun onPermissionEdited(position: Int, host: String, permissions: WebPermissions) {
-        val activity = activity ?: return
-
-        adapter[position] = Pair(host, permissions)
+    override fun onPermissionEdited(position: Int, permissions: WebPermissions) {
+        adapter[position] = permissions
         adapter.notifyItemChanged(position)
 
-        WebPermissionsDatabase.getInstance(activity.applicationContext).update(host, permissions)
+        ui {
+            webPermissionsDao.update(permissions)
+        }
+
         WebRtcPermission.clearCache()
     }
 

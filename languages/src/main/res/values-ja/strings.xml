@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright (C) 2017-2019 Hazuki
+  ~ Copyright (C) 2017-2021 Hazuki
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -34,10 +34,15 @@
     <string name="confirm_delete_all_displayed_item">表示中の履歴を全て削除しますか？</string>
     <string name="confirm_delete_all_favicon">ファビコンを全て削除しますか？</string>
     <string name="confirm_delete_bookmark">このブックマークを削除しますか？</string>
+    <string name="confirm_delete_download">このファイルをデバイスから削除しますか?</string>
+    <string name="confirm_delete_download_list">このファイルをリストから削除しますか?</string>
     <string name="confirm_delete_button">このボタンを削除しますか？</string>
     <string name="confirm_delete_speedDial">このスピードダイアルを削除しますか？</string>
     <string name="confirm_delete_gesture">このジェスチャーを削除しますか？</string>
     <string name="confirm_delete_search_url">この検索URLを削除しますか？</string>
+    <plurals name="confirm_delete_multiple">
+        <item quantity="other">選択したアイテムを削除してもよろしいですか？</item>
+    </plurals>
     <string name="delete_history">履歴の削除</string>
     <string name="delete_all_history">履歴の全削除</string>
     <string name="delete_all_displayed_item">表示中の履歴を全削除</string>
@@ -54,6 +59,7 @@
     <string name="minimize">最小化</string>
     <string name="open">開く</string>
     <string name="open_new">新しいタブで開く</string>
+    <string name="open_current">現在のタブで開く</string>
     <string name="open_bg">バックグラウンドで開く</string>
     <string name="open_new_right">新しいタブで右に開く</string>
     <string name="open_bg_right">バックグラウンドで右に開く</string>
@@ -202,6 +208,8 @@
     <string name="cannot_access_folder">ディレクトリにアクセスできません</string>
     <string name="add_by_edit">直接入力で追加</string>
     <string name="add_from_file">ファイルから追加</string>
+    <string name="from_theme_file">テーマファイル</string>
+    <string name="from_theme_folder">テーマフォルダ</string>
     <string name="set_folder_path">パスの直接入力</string>
     <string name="go_data_folder">データフォルダへ移動</string>
     <string name="go_sd_folder">外部ストレージフォルダへ移動</string>
@@ -213,7 +221,7 @@
     <string name="multi_select">複数選択</string>
     <string name="select_this_item">このアイテムを選択</string>
     <string name="save_to">保存先</string>
-    <string name="saved_file">保存しました :</string>
+    <string name="saved_file">保存しました</string>
     <string name="savepage_save_archive">WebアーカイブMHTMLとして保存</string>
     <string name="action_easy_add">簡易追加</string>
     <string name="resblock_is_white">ブロックしない</string>
@@ -226,6 +234,7 @@
     <string name="refresh">更新</string>
 
     <string name="default_text">デフォルト</string>
+    <string name="custom">カスタム</string>
     <string name="delete">削除</string>
 
     <string name="find_on_page">ページ内検索</string>
@@ -250,9 +259,10 @@
     <string name="download_notify">ダウンロードの状態</string>
 
     <string name="permission_probrem">パーミッション不足</string>
-    <string name="request_permission_storage_setting">[アクセス権]をタップしてからストレージを有効にしてください</string>
+    <string name="request_permission_storage_setting">[権限]をタップしてからストレージを有効にしてください</string>
     <string name="confirm_permission_storage">この機能を利用するにはストレージのアクセス権が必要です</string>
     <string name="confirm_permission_storage_app">このアプリを利用するにはストレージのアクセス権が必要です</string>
+    <string name="request_permission_location_setting">[権限]をタップしてから位置情報を有効にしてください</string>
 
     <string name="not_bookmark_file">このファイルはHTMLブックマークファイルではありません。</string>
 
@@ -263,6 +273,9 @@
     <string name="unknown">不明</string>
     <string name="delete_mf_gesture">マルチタッチジェスチャを削除</string>
     <string name="confirm_delete_mf_gesture">このジェスチャを削除しますか？</string>
+    <string name="theme_import">テーマをインポート</string>
+    <string name="theme_management">テーマ管理</string>
+    <string name="delete_theme">テーマを削除</string>
     <string name="theme_importer">Yuzu Browserテーマ インポート</string>
     <string name="theme_imported">\"%1$s\"をインポートしました</string>
     <string name="theme_installed_version">このバージョンのテーマはインポート済みです</string>
@@ -327,4 +340,5 @@
     <string name="add_filter">フィルタの追加</string>
     <string name="site">サイト</string>
     <string name="updating_ad_filters">広告ブロックフィルタを更新中</string>
+    <string name="do_nothing">なにもしない</string>
 </resources>

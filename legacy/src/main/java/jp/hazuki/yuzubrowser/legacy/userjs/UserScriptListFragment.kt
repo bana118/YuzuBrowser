@@ -22,35 +22,43 @@ import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import android.os.Environment
 import android.view.*
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.PopupMenu
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.LifecycleOwner
 import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
 import jp.hazuki.yuzubrowser.core.utility.log.ErrorReport
 import jp.hazuki.yuzubrowser.core.utility.utils.ArrayUtils
-import jp.hazuki.yuzubrowser.core.utility.utils.IOUtils
 import jp.hazuki.yuzubrowser.legacy.R
-import jp.hazuki.yuzubrowser.legacy.utils.view.filelist.FileListActivity
+import jp.hazuki.yuzubrowser.legacy.databinding.FragmentUserScriptListBinding
+import jp.hazuki.yuzubrowser.legacy.databinding.FragmentUserjsItemBinding
 import jp.hazuki.yuzubrowser.ui.dialog.DeleteDialogCompat
+import jp.hazuki.yuzubrowser.ui.extensions.applyIconColor
+import jp.hazuki.yuzubrowser.ui.extensions.registerForStartActivityForResult
 import jp.hazuki.yuzubrowser.ui.widget.recycler.ArrayRecyclerAdapter
 import jp.hazuki.yuzubrowser.ui.widget.recycler.DividerItemDecoration
 import jp.hazuki.yuzubrowser.ui.widget.recycler.OnRecyclerListener
-import kotlinx.android.extensions.LayoutContainer
-import kotlinx.android.synthetic.main.fragment_user_script_list.*
-import kotlinx.android.synthetic.main.fragment_userjs_item.*
-import java.io.File
 import java.io.IOException
 
-class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemClickListener, DeleteDialogCompat.OnDelete {
+class UserScriptListFragment : Fragment(), OnUserJsItemClickListener, DeleteDialogCompat.OnDelete {
     private lateinit var mDb: UserScriptDatabase
     private lateinit var adapter: UserJsAdapter
 
+    private var viewBinding: FragmentUserScriptListBinding? = null
+
+    private val binding: FragmentUserScriptListBinding
+        get() = viewBinding!!
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         setHasOptionsMenu(true)
-        return inflater.inflate(R.layout.fragment_user_script_list, container, false)
+        viewBinding = FragmentUserScriptListBinding.inflate(layoutInflater, container, false)
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -58,28 +66,31 @@ class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemCli
 
         mDb = UserScriptDatabase.getInstance(activity.applicationContext)
 
-        recyclerView.run {
-            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(activity)
-            addItemDecoration(DividerItemDecoration(activity))
-            val helper = ItemTouchHelper(ListTouch())
-            helper.attachToRecyclerView(this)
-            addItemDecoration(helper)
-        }
+        binding.apply {
+            recyclerView.run {
+                layoutManager = LinearLayoutManager(activity)
+                addItemDecoration(DividerItemDecoration(activity))
+                val helper = ItemTouchHelper(ListTouch())
+                helper.attachToRecyclerView(this)
+                addItemDecoration(helper)
+            }
 
-        addByEditFab.setOnClickListener {
-            startActivityForResult(Intent(activity, UserScriptEditActivity::class.java), REQUEST_ADD_USERJS)
-            fabMenu.close(false)
-        }
+            addByEditFab.setOnClickListener {
+                resetLauncher.launch(Intent(activity, UserScriptEditActivity::class.java))
+                fabMenu.close(false)
+            }
 
-        addFromFileFab.setOnClickListener {
-            val intent = Intent(activity, FileListActivity::class.java)
-            intent.putExtra(FileListActivity.EXTRA_FILE, Environment.getExternalStorageDirectory())
-            startActivityForResult(intent, REQUEST_ADD_FROM_FILE)
-            fabMenu.close(false)
-        }
+            addFromFileFab.setOnClickListener {
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    type = "application/javascript"
+                }
+                importFromFileLauncher.launch(intent)
+                fabMenu.close(false)
+            }
 
-        adapter = UserJsAdapter(activity, mDb.allList, this)
-        recyclerView.adapter = adapter
+            adapter = UserJsAdapter(activity, viewLifecycleOwner, mDb.allList, this@UserScriptListFragment)
+            recyclerView.adapter = adapter
+        }
     }
 
     private fun reset() {
@@ -101,7 +112,7 @@ class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemCli
         PopupMenu(activity, v).apply {
             menu.run {
                 add(R.string.userjs_info).setOnMenuItemClickListener {
-                    onInfoButtonClick(null, position)
+                    onInfoButtonClick(position)
                     false
                 }
 
@@ -110,7 +121,7 @@ class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemCli
                     val item = adapter[position]
                     intent.putExtra(Intent.EXTRA_TITLE, item.name)
                     intent.putExtra(UserScriptEditActivity.EXTRA_USERSCRIPT, item.id)
-                    startActivityForResult(intent, REQUEST_EDIT_USERJS)
+                    resetLauncher.launch(intent)
                     false
                 }
 
@@ -129,41 +140,43 @@ class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemCli
         mDb.delete(js)
     }
 
-    override fun onInfoButtonClick(v: View?, index: Int) {
+    override fun onInfoButtonClick(index: Int) {
         InfoDialog.newInstance(adapter[index])
-                .show(childFragmentManager, "info")
+            .show(childFragmentManager, "info")
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when (requestCode) {
-            REQUEST_ADD_USERJS, REQUEST_EDIT_USERJS -> {
-                if (resultCode != RESULT_OK) return
-                reset()
-            }
-            REQUEST_ADD_FROM_FILE -> {
-                if (resultCode != RESULT_OK || data == null) return
-                val file = data.getSerializableExtra(FileListActivity.EXTRA_FILE) as? File ?: throw NullPointerException("file is null")
-                AlertDialog.Builder(activity)
-                        .setTitle(R.string.confirm)
-                        .setMessage(String.format(getString(R.string.userjs_add_file_confirm), file.name))
-                        .setPositiveButton(android.R.string.yes) { _, _ ->
-                            try {
-                                val data1 = IOUtils.readFile(file, "UTF-8")
-                                mDb.add(UserScript(data1))
-                                reset()
-                            } catch (e: IOException) {
-                                ErrorReport.printAndWriteLog(e)
-                                Toast.makeText(activity, R.string.failed, Toast.LENGTH_LONG).show()
-                            }
-                        }
-                        .setNegativeButton(android.R.string.no, null)
-                        .show()
-            }
+    private val resetLauncher = registerForStartActivityForResult {
+        if (it.resultCode == RESULT_OK) reset()
+    }
+
+    private val importFromFileLauncher = registerForStartActivityForResult {
+        if (it.resultCode != RESULT_OK) return@registerForStartActivityForResult
+
+        val uri = it.data!!.data
+        if (uri == null) {
+            Toast.makeText(activity, R.string.failed, Toast.LENGTH_LONG).show()
+            return@registerForStartActivityForResult
         }
+
+        try {
+            requireContext().contentResolver.openInputStream(uri)?.apply {
+                reader().use { reader ->
+                    val data = reader.readText()
+                    mDb.add(UserScript(data))
+                    read()
+                    Toast.makeText(activity, R.string.succeed, Toast.LENGTH_LONG).show()
+                    return@registerForStartActivityForResult
+                }
+            }
+        } catch (e: IOException) {
+            ErrorReport.printAndWriteLog(e)
+        }
+        Toast.makeText(activity, R.string.failed, Toast.LENGTH_LONG).show()
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.sort, menu)
+        applyIconColor(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -181,37 +194,37 @@ class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemCli
 
     private inner class ListTouch : ItemTouchHelper.Callback() {
 
-        override fun getMovementFlags(recyclerView: androidx.recyclerview.widget.RecyclerView, viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder): Int =
-                ItemTouchHelper.Callback.makeFlag(ItemTouchHelper.ACTION_STATE_SWIPE, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) or ItemTouchHelper.Callback.makeFlag(ItemTouchHelper.ACTION_STATE_DRAG, ItemTouchHelper.DOWN or ItemTouchHelper.UP)
+        override fun getMovementFlags(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder): Int =
+            makeFlag(ItemTouchHelper.ACTION_STATE_SWIPE, ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT) or makeFlag(ItemTouchHelper.ACTION_STATE_DRAG, ItemTouchHelper.DOWN or ItemTouchHelper.UP)
 
-        override fun onMove(recyclerView: androidx.recyclerview.widget.RecyclerView, viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder, target: androidx.recyclerview.widget.RecyclerView.ViewHolder): Boolean {
+        override fun onMove(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder): Boolean {
             adapter.move(viewHolder.adapterPosition, target.adapterPosition)
             mDb.saveAll(adapter.items)
             return true
         }
 
-        override fun onSwiped(viewHolder: androidx.recyclerview.widget.RecyclerView.ViewHolder, direction: Int) {
+        override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
             val index = viewHolder.adapterPosition
             val js = adapter.remove(index)
-            Snackbar.make(linear, R.string.deleted, Snackbar.LENGTH_SHORT)
-                    .setAction(R.string.undo) {
-                        adapter.add(index, js)
-                        adapter.notifyDataSetChanged()
-                    }
-                    .addCallback(object : Snackbar.Callback() {
-                        override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
-                            if (event != Snackbar.Callback.DISMISS_EVENT_ACTION) {
-                                mDb.delete(js)
-                            }
+            Snackbar.make(binding.linear, R.string.deleted, Snackbar.LENGTH_SHORT)
+                .setAction(R.string.undo) {
+                    adapter.add(index, js)
+                    adapter.notifyDataSetChanged()
+                }
+                .addCallback(object : Snackbar.Callback() {
+                    override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                        if (event != DISMISS_EVENT_ACTION) {
+                            mDb.delete(js)
                         }
-                    })
+                    }
+                })
                     .show()
         }
 
         override fun isLongPressDragEnabled(): Boolean = adapter.isSortMode
     }
 
-    class InfoDialog : androidx.fragment.app.DialogFragment() {
+    class InfoDialog : DialogFragment() {
 
         override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
             val view = View.inflate(activity, R.layout.userjs_info_dialog, null)
@@ -256,34 +269,42 @@ class UserScriptListFragment : androidx.fragment.app.Fragment(), OnUserJsItemCli
         }
     }
 
-    private class UserJsAdapter internal constructor(context: Context, list: MutableList<UserScript>, private val listener: OnRecyclerListener) : ArrayRecyclerAdapter<UserScript, UserJsAdapter.ViewHolder>(context, list, listener) {
+    class UserJsAdapter(
+        context: Context,
+        private val lifecycleOwner: LifecycleOwner,
+        list: MutableList<UserScript>,
+        private val listener: OnRecyclerListener
+    ) : ArrayRecyclerAdapter<UserScript, UserJsAdapter.ViewHolder>(context, list, listener) {
 
         override fun onCreateViewHolder(inflater: LayoutInflater, parent: ViewGroup?, viewType: Int): ViewHolder =
-                ViewHolder(inflater.inflate(R.layout.fragment_userjs_item, parent, false), this)
+            ViewHolder(FragmentUserjsItemBinding.inflate(inflater, parent, false), lifecycleOwner, this)
 
-        private fun onInfoButtonClick(v: View, position: Int, js: UserScript) {
+        private fun onInfoButtonClick(position: Int, js: UserScript) {
             val resolvedPosition = searchPosition(position, js)
             if (resolvedPosition < 0) return
             (listener as OnUserJsItemClickListener)
-                    .onInfoButtonClick(v, resolvedPosition)
+                .onInfoButtonClick(resolvedPosition)
         }
 
-        internal class ViewHolder(override val containerView: View, adapter: UserJsAdapter) : ArrayRecyclerAdapter.ArrayViewHolder<UserScript>(containerView, adapter), LayoutContainer {
+        class ViewHolder(
+            val binding: FragmentUserjsItemBinding,
+            lifecycleOwner: LifecycleOwner,
+            private val adapter: UserJsAdapter,
+        ) : ArrayRecyclerAdapter.ArrayViewHolder<UserScript>(binding.root, adapter) {
+
             init {
-                infoButton.setOnClickListener { v -> adapter.onInfoButtonClick(v, adapterPosition, item) }
+                binding.lifecycleOwner = lifecycleOwner
             }
 
             override fun setUp(item: UserScript) {
                 super.setUp(item)
-                textView.text = item.name
-                checkBox.isChecked = item.isEnabled
+                binding.script = item
+                binding.viewHolder = this
+            }
+
+            fun onClick() {
+                adapter.onInfoButtonClick(adapterPosition, item)
             }
         }
-    }
-
-    companion object {
-        private const val REQUEST_ADD_USERJS = 1
-        private const val REQUEST_EDIT_USERJS = 2
-        private const val REQUEST_ADD_FROM_FILE = 3
     }
 }

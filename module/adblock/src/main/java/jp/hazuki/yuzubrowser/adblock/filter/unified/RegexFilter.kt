@@ -23,14 +23,17 @@ class RegexFilter(
     contentType: Int,
     ignoreCase: Boolean,
     domains: DomainMap?,
-    thirdParty: Int
+    thirdParty: Int,
 ) : UnifiedFilter(filter, contentType, ignoreCase, domains, thirdParty) {
-    private val regex = if (ignoreCase) filter.toRegex(RegexOption.IGNORE_CASE) else filter.toRegex()
+    private val regex = if (ignoreCase) pattern.toRegex(RegexOption.IGNORE_CASE) else pattern.toRegex()
 
-    override val type: Int
+    override val filterType: Int
         get() = FILTER_TYPE_JVM_REGEX
 
     override fun check(url: Uri): Boolean {
         return regex.matches(url.toString())
     }
+
+    override val isRegex: Boolean
+        get() = true
 }

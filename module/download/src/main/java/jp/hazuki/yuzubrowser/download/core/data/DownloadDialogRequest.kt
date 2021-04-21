@@ -17,7 +17,7 @@
 package jp.hazuki.yuzubrowser.download.core.data
 
 import android.os.Parcelable
-import kotlinx.android.parcel.Parcelize
+import kotlinx.parcelize.Parcelize
 
 @Parcelize
 internal class DownloadDialogRequest(

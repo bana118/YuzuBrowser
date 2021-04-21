@@ -16,7 +16,6 @@
 
 package jp.hazuki.yuzubrowser.adblock.filter.unified.io
 
-import com.google.re2j.Pattern
 import jp.hazuki.yuzubrowser.adblock.filter.toInt
 import jp.hazuki.yuzubrowser.adblock.filter.toShortInt
 import jp.hazuki.yuzubrowser.adblock.filter.unified.*
@@ -31,12 +30,11 @@ class FilterReader(private val input: InputStream) {
         return header contentEquals data
     }
 
-    fun readAll(): List<UnifiedFilter> {
+    fun readAll() = sequence {
         val intBuf = ByteArray(4)
         val shortBuf = ByteArray(2)
         input.read(intBuf)
         val size = intBuf.toInt()
-        val list = ArrayList<UnifiedFilter>(size)
         var patternBuffer = ByteArray(32)
 
         loop@ for (loop in 0 until size) {
@@ -73,6 +71,11 @@ class FilterReader(private val input: InputStream) {
             val domains = when (domainsSize) {
                 0 -> null
                 1 -> {
+                    val containerInclude = when (input.read()) {
+                        0 -> false
+                        1 -> true
+                        else -> break@loop
+                    }
                     val textSize = input.readVariableInt(shortBuf, intBuf)
                     if (textSize == -1) break@loop
                     if (patternBuffer.size < textSize) {
@@ -85,6 +88,9 @@ class FilterReader(private val input: InputStream) {
                         1 -> true
                         else -> break@loop
                     }
+
+                    if (containerInclude != include) break@loop
+
                     SingleDomainMap(include, domain)
                 }
                 else -> {
@@ -120,15 +126,14 @@ class FilterReader(private val input: InputStream) {
                 FILTER_TYPE_START -> StartsWithFilter(pattern, contentType, ignoreCase, domains, thirdParty)
                 FILTER_TYPE_END -> EndWithFilter(pattern, contentType, domains, thirdParty)
                 FILTER_TYPE_START_END -> StartEndFilter(pattern, contentType, ignoreCase, domains, thirdParty)
-                FILTER_TYPE_RE2_REGEX -> Re2Filter(Pattern.compile(pattern), pattern, contentType, ignoreCase, domains, thirdParty)
-                FILTER_TYPE_RE2_REGEX_HOST -> Re2HostFilter(Pattern.compile(pattern), pattern, contentType, ignoreCase, domains, thirdParty)
+                FILTER_TYPE_RE2_REGEX -> Re2Filter(pattern, contentType, ignoreCase, domains, thirdParty)
+                FILTER_TYPE_RE2_REGEX_HOST -> Re2HostFilter(pattern, contentType, ignoreCase, domains, thirdParty)
                 FILTER_TYPE_JVM_REGEX -> RegexFilter(pattern, contentType, ignoreCase, domains, thirdParty)
                 FILTER_TYPE_JVM_REGEX_HOST -> RegexHostFilter(pattern, contentType, ignoreCase, domains, thirdParty)
                 FILTER_TYPE_PATTERN -> PatternMatchFilter(pattern, contentType, ignoreCase, domains, thirdParty)
                 else -> break@loop
             }
-            list.add(filter)
+            yield(filter)
         }
-        return list
     }
 }

@@ -177,13 +177,6 @@
     <string name="pref_lpress_others">Sonstige</string>
     <string name="pref_clear_data_at_finish">Daten beim Beenden löschen</string>
     <string name="pref_security_settings">Sicherheitseinstellungen</string>
-    <string name="pref_file_access">Einstellungen für den Zugriff auf lokale Dateien</string>
-
-    <string-array name="pref_file_access_list">
-        <item>Deaktivieren (am sichersten)</item>
-        <item>Im Sandkasten aktivieren (sicherer)</item>
-        <item>Aktivieren (unsicher)</item>
-    </string-array>
 
     <string name="pref_mixed_content">Einstellungen für unsichere Inhalte auf https</string>
 
@@ -355,9 +348,9 @@
 
     <string name="pref_ad_block">Werbeblocker-Einstellungen</string>
     <string name="pref_ad_block_enable">Werbeblocker aktivieren</string>
-    <string name="pref_ad_block_black">Black List</string>
-    <string name="pref_ad_block_white">White List</string>
-    <string name="pref_ad_block_white_page">White Page List</string>
+    <string name="pref_ad_block_black">Liste verweigern</string>
+    <string name="pref_ad_block_white">Liste zulassen</string>
+    <string name="pref_ad_block_white_page">Seitenliste zulassen</string>
     <string name="exclude_comment">Kommentarzeilen ausschließen</string>
     <string name="pref_edit">Bearbeiten</string>
     <string name="pref_delete">Löschen</string>
@@ -448,7 +441,6 @@
     <string name="pref_privacy_policy">Datenschutzerklärung</string>
     <string name="mining_protect">ohne Münze</string>
     <string name="mining_protect_summary">Kryptowährung Mining-Schutz</string>
-    <string name="pref_storage_location_warn">Dieser Speicherort funktioniert möglicherweise nicht ordnungsgemäß mit anderen Anwendungen.</string>
     <string name="pref_fake_chrome">Als Chrome tarnen</string>
     <string name="pref_fake_chrome_summary">Standard UserAgent als Chrome ausgeben</string>
     <string name="pref_toolbar_small_icon">Symbol bei langem Drücken anzeigen</string>

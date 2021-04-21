@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -111,16 +111,16 @@ internal class CacheWebView(context: Context) : AbstractCacheWebView(context), W
     }
 
     init {
-        val web = SwipeWebView(context)
+        val web = NormalWebView(context)
         mList.add(WebViewPage(web))
         addView(web)
     }
 
     private fun webView2Data(web: CustomWebView): WebViewPage? = mList.firstOrNull { it.webView == web }
 
-    override fun newTab(url: String, additionalHttpHeaders: Map<String, String>) {
+    override fun createTab(url: String, additionalHttpHeaders: Map<String, String>) {
         val from = mList[current]
-        val to = WebViewPage(SwipeWebView(context))
+        val to = WebViewPage(NormalWebView(context))
         for (i in mList.size - 1 downTo current + 1) {
             mList[i].webView.destroy()
             mList.removeAt(i)
@@ -174,12 +174,12 @@ internal class CacheWebView(context: Context) : AbstractCacheWebView(context), W
         current = inState.getInt("CacheWebView.WEB_CURRENT_COUNT")
 
         for (i in 0 until all) {
-            val web = WebViewPage(SwipeWebView(context))
+            val web = WebViewPage(NormalWebView(context))
             web.webView.onPause()
             mList.add(web)
             if (i == current)
                 addView(web.webView.view)
-            web.webView.restoreState(inState.getBundle("CacheWebView.WEB_NO$i"))
+            web.webView.restoreState(inState.getBundle("CacheWebView.WEB_NO$i")!!)
             from.webView.copySettingsTo(web.webView)
         }
         move(from, mList[current])

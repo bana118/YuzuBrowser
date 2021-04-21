@@ -177,13 +177,6 @@
     <string name="pref_lpress_others">其他</string>
     <string name="pref_clear_data_at_finish">结束时清除数据</string>
     <string name="pref_security_settings">安全设置</string>
-    <string name="pref_file_access">本地文件访问设置</string>
-
-    <string-array name="pref_file_access_list">
-        <item>禁用（最安全）</item>
-        <item>在沙箱中启用（较安全）</item>
-        <item>启用（不安全）</item>
-    </string-array>
 
     <string name="pref_mixed_content">Https 中的不安全内容设置</string>
 
@@ -449,7 +442,6 @@
     <string name="pref_privacy_policy">隐私政策</string>
     <string name="mining_protect">拒绝挖币</string>
     <string name="mining_protect_summary">加密币挖掘脚本保护</string>
-    <string name="pref_storage_location_warn">此存储位置可能无法在其他应用之间正常工作。</string>
     <string name="pref_fake_chrome">伪装为 Chrome</string>
     <string name="pref_fake_chrome_summary">将默认 UserAgent 伪装为 Chrome</string>
     <string name="pref_toolbar_small_icon">显示长按图标</string>

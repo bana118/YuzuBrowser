@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,30 @@
 
 apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-parcelize'
 apply plugin: 'kotlin-kapt'
+apply plugin: 'dagger.hilt.android.plugin'
 
 android {
-    compileSdkVersion 28
-
-
+    compileSdkVersion Build.compile_sdk_version
+    buildToolsVersion Build.build_tools_version
 
     defaultConfig {
-        minSdkVersion 21
-        targetSdkVersion 28
+        minSdkVersion Build.min_sdk_version
+        targetSdkVersion Build.target_sdk_version
         versionCode 1
         versionName "1.0"
 
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+    }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = "1.8"
     }
 
     buildTypes {
@@ -44,10 +52,10 @@ android {
     testOptions {
         unitTests.returnDefaultValues = true
     }
-}
 
-androidExtensions {
-    experimental = true
+    buildFeatures {
+        dataBinding true
+    }
 }
 
 dependencies {
@@ -68,25 +76,21 @@ dependencies {
     implementation AndroidX.room
     implementation AndroidX.roomKtx
     implementation AndroidX.fix_preference
+    implementation AndroidX.fragmentKtx
     kapt AndroidX.roomCompiler
 
     implementation Libs.kotlin_stdlib
     implementation Libs.kotlin_coroutines
     implementation Libs.kotlin_coroutines_android
-    implementation Libs.kotlin_anko_commons
 
-    implementation Libs.dagger2
-    annotationProcessor Libs.dagger2_compiler
-    kapt Libs.dagger2_compiler
-    implementation Libs.dagger_android
-    implementation Libs.dagger_android_support
-    kapt Libs.dagger_android_processor
+    implementation Dagger.hilt
+    kapt Dagger.hiltCompiler
 
     implementation Libs.kvs_schema
     kapt Libs.kvs_schema_compiler
 
-    implementation project(':core')
-    implementation project(':ui')
+    implementation project(':module:core')
+    implementation project(':module:ui')
     implementation project(':languages')
     implementation project(':libraries:floatingactionbutton')
 

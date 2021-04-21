@@ -20,30 +20,47 @@ import android.content.Context
 import android.os.Bundle
 import android.view.*
 import android.widget.Toast
+import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.ItemTouchHelper
 import com.google.android.material.snackbar.Snackbar
 import com.squareup.moshi.Moshi
-import dagger.android.support.DaggerFragment
+import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.qualifiers.ApplicationContext
 import jp.hazuki.yuzubrowser.legacy.R
+import jp.hazuki.yuzubrowser.legacy.databinding.RecyclerWithFabBinding
 import jp.hazuki.yuzubrowser.legacy.useragent.SelectActionDialog.DELETE
 import jp.hazuki.yuzubrowser.legacy.useragent.SelectActionDialog.EDIT
+import jp.hazuki.yuzubrowser.ui.extensions.applyIconColor
 import jp.hazuki.yuzubrowser.ui.widget.recycler.DividerItemDecoration
 import jp.hazuki.yuzubrowser.ui.widget.recycler.OnRecyclerListener
-import kotlinx.android.synthetic.main.recycler_with_fab.*
 import javax.inject.Inject
 
-class UserAgentSettingFragment : DaggerFragment(), DeleteUserAgentDialog.OnDelete, EditUserAgentDialog.OnEditedUserAgent, SelectActionDialog.OnActionSelect, OnRecyclerListener {
+@AndroidEntryPoint
+class UserAgentSettingFragment : Fragment(), DeleteUserAgentDialog.OnDelete, EditUserAgentDialog.OnEditedUserAgent, SelectActionDialog.OnActionSelect, OnRecyclerListener {
     private lateinit var mUserAgentList: UserAgentList
     private lateinit var mAdapter: UserAgentRecyclerAdapter
 
     @Inject
     lateinit var moshi: Moshi
+
     @Inject
+    @ApplicationContext
     lateinit var applicationContext: Context
+
+    private var viewBinding: RecyclerWithFabBinding? = null
+
+    private val binding: RecyclerWithFabBinding
+        get() = viewBinding!!
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
         setHasOptionsMenu(true)
-        return inflater.inflate(R.layout.recycler_with_fab, container, false)
+        viewBinding = RecyclerWithFabBinding.inflate(layoutInflater, container, false)
+        return binding.root
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        viewBinding = null
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -52,18 +69,20 @@ class UserAgentSettingFragment : DaggerFragment(), DeleteUserAgentDialog.OnDelet
         mUserAgentList = UserAgentList()
         mUserAgentList.read(activity, moshi)
 
-        recyclerView.run {
-            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(activity)
-            val helper = ItemTouchHelper(ListTouch())
-            helper.attachToRecyclerView(this)
-            addItemDecoration(helper)
-            addItemDecoration(DividerItemDecoration(activity))
+        binding.apply {
+            recyclerView.run {
+                layoutManager = androidx.recyclerview.widget.LinearLayoutManager(activity)
+                val helper = ItemTouchHelper(ListTouch())
+                helper.attachToRecyclerView(this)
+                addItemDecoration(helper)
+                addItemDecoration(DividerItemDecoration(activity))
+            }
+
+            mAdapter = UserAgentRecyclerAdapter(activity, mUserAgentList, this@UserAgentSettingFragment)
+            recyclerView.adapter = mAdapter
+
+            fab.setOnClickListener { EditUserAgentDialog.newInstance().show(childFragmentManager, "new") }
         }
-
-        mAdapter = UserAgentRecyclerAdapter(activity, mUserAgentList, this)
-        recyclerView.adapter = mAdapter
-
-        fab.setOnClickListener { EditUserAgentDialog.newInstance().show(childFragmentManager, "new") }
     }
 
     override fun onDelete(position: Int) {
@@ -88,6 +107,7 @@ class UserAgentSettingFragment : DaggerFragment(), DeleteUserAgentDialog.OnDelet
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.sort, menu)
+        applyIconColor(menu)
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
@@ -139,7 +159,7 @@ class UserAgentSettingFragment : DaggerFragment(), DeleteUserAgentDialog.OnDelet
             val position = viewHolder.adapterPosition
             val ua = mAdapter.remove(position)
 
-            Snackbar.make(rootLayout, R.string.deleted, Snackbar.LENGTH_SHORT)
+            Snackbar.make(binding.root, R.string.deleted, Snackbar.LENGTH_SHORT)
                     .setAction(R.string.undo) {
                         mAdapter.add(position, ua)
                         mAdapter.notifyItemInserted(position)

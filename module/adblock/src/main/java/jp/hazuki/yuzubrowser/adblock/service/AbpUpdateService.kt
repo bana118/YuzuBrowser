@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,17 +18,15 @@ package jp.hazuki.yuzubrowser.adblock.service
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.ResultReceiver
-import androidx.core.app.NotificationCompat
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import dagger.android.DaggerIntentService
+import androidx.core.app.JobIntentService
+import androidx.core.content.getSystemService
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.adblock.BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA
-import jp.hazuki.yuzubrowser.adblock.NOTIFICATION_CHANNEL_ADBLOCK_FILTER_UPDATE
-import jp.hazuki.yuzubrowser.adblock.R
 import jp.hazuki.yuzubrowser.adblock.filter.abp.*
 import jp.hazuki.yuzubrowser.adblock.filter.unified.UnifiedFilter
 import jp.hazuki.yuzubrowser.adblock.filter.unified.element.ElementFilter
@@ -38,6 +36,10 @@ import jp.hazuki.yuzubrowser.adblock.filter.unified.io.FilterWriter
 import jp.hazuki.yuzubrowser.adblock.repository.AdBlockPref
 import jp.hazuki.yuzubrowser.adblock.repository.abp.AbpDatabase
 import jp.hazuki.yuzubrowser.adblock.repository.abp.AbpEntity
+import jp.hazuki.yuzubrowser.core.eventbus.LocalEventBus
+import jp.hazuki.yuzubrowser.core.utility.extensions.isConnectedWifi
+import jp.hazuki.yuzubrowser.core.utility.log.ErrorReport
+import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -47,7 +49,8 @@ import java.io.IOException
 import java.nio.charset.Charset
 import javax.inject.Inject
 
-class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
+@AndroidEntryPoint
+class AbpUpdateService : JobIntentService() {
 
     @Inject
     internal lateinit var okHttpClient: OkHttpClient
@@ -55,10 +58,10 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
     @Inject
     internal lateinit var abpDatabase: AbpDatabase
 
-    override fun onHandleIntent(intent: Intent?) {
-        when (intent?.action) {
+    override fun onHandleWork(intent: Intent) {
+        when (intent.action) {
             ACTION_UPDATE_ABP -> {
-                val param1 = intent.getParcelableExtra<AbpEntity>(EXTRA_ABP_ENTRY)
+                val param1 = intent.getParcelableExtra<AbpEntity>(EXTRA_ABP_ENTRY)!!
                 val result = intent.getParcelableExtra<ResultReceiver?>(EXTRA_RESULT)
                 updateAbpEntity(param1, result)
             }
@@ -70,30 +73,13 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
         }
     }
 
-    override fun onCreate() {
-        super.onCreate()
-
-        val notify = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ADBLOCK_FILTER_UPDATE)
-            .setContentTitle(getText(R.string.updating_ad_filters))
-            .setSmallIcon(R.drawable.ic_yuzubrowser_white)
-            .setPriority(NotificationCompat.PRIORITY_MIN)
-            .setProgress(0, 0, true)
-            .build()
-        startForeground(1, notify)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopForeground(true)
-    }
-
     private fun updateAll(forceUpdate: Boolean, resultReceiver: ResultReceiver?) = runBlocking {
         var result = false
         var nextUpdateTime = Long.MAX_VALUE
         val now = System.currentTimeMillis()
         abpDatabase.abpDao().getAll().forEach {
             if (forceUpdate || it.isNeedUpdate()) {
-                val localResult = updateInternal(it)
+                val localResult = updateInternal(it, forceUpdate)
                 if (localResult && it.expires > 0) {
                     val nextTime = it.expires * AN_HOUR + now
                     if (nextTime < nextUpdateTime) nextUpdateTime = nextTime
@@ -108,9 +94,7 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
             System.currentTimeMillis() + A_DAY
         }
         if (result) {
-            LocalBroadcastManager
-                    .getInstance(applicationContext)
-                    .sendBroadcast(Intent(BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA))
+            LocalEventBus.getDefault().notify(BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA)
         }
         resultReceiver?.send(RESULT_CODE_UPDATE_ALL, null)
     }
@@ -118,24 +102,22 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
     private fun updateAbpEntity(entity: AbpEntity, result: ResultReceiver?) = runBlocking {
         if (updateInternal(entity)) {
             result?.send(RESULT_CODE_UPDATED, Bundle().apply { putParcelable(EXTRA_ABP_ENTRY, entity) })
-            LocalBroadcastManager
-                    .getInstance(applicationContext)
-                    .sendBroadcast(Intent(BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA))
+            LocalEventBus.getDefault().notify(BROADCAST_ACTION_UPDATE_AD_BLOCK_DATA)
         } else {
             result?.send(RESULT_CODE_FAILED, Bundle().apply { putParcelable(EXTRA_ABP_ENTRY, entity) })
         }
     }
 
-    private suspend fun updateInternal(entity: AbpEntity): Boolean {
+    private suspend fun updateInternal(entity: AbpEntity, forceUpdate: Boolean = false): Boolean {
         return when {
             entity.url == "yuzu://adblock/filter" -> updateAssets(entity)
-            entity.url.startsWith("http") -> updateHttp(entity)
+            entity.url.startsWith("http") -> updateHttp(entity, forceUpdate)
             entity.url.startsWith("file") -> updateFile(entity)
             else -> false
         }
     }
 
-    private suspend fun updateHttp(entity: AbpEntity): Boolean {
+    private suspend fun updateHttp(entity: AbpEntity, forceUpdate: Boolean): Boolean {
 
         val request = try {
             Request.Builder()
@@ -145,14 +127,17 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
             return false
         }
 
-        entity.lastModified?.let {
-            val dir = getFilterDir()
+        if (!forceUpdate) {
+            entity.lastModified?.let {
+                val dir = getFilterDir()
 
-            if (dir.getAbpBlackListFile(entity).exists() ||
-                dir.getAbpWhiteListFile(entity).exists() ||
-                dir.getAbpWhitePageListFile(entity).exists())
-                request.addHeader("If-Modified-Since", it)
+                if (dir.getAbpBlackListFile(entity).exists() ||
+                    dir.getAbpWhiteListFile(entity).exists() ||
+                    dir.getAbpWhitePageListFile(entity).exists())
+                    request.addHeader("If-Modified-Since", it)
+            }
         }
+
         val call = okHttpClient.newCall(request.build())
         try {
             val response = call.execute()
@@ -166,7 +151,9 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
                 val charset = contentType()?.charset() ?: Charsets.UTF_8
                 source().inputStream().bufferedReader(charset).use { reader ->
                     if (decode(reader, charset, entity)) {
+                        entity.lastLocalUpdate = System.currentTimeMillis()
                         entity.lastModified = response.header("Last-Modified")
+                        abpDatabase.abpDao().update(entity)
                         return true
                     }
                 }
@@ -221,26 +208,26 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
         entity.lastLocalUpdate = System.currentTimeMillis()
         val dir = getFilterDir()
 
-        try {
-            val writer = FilterWriter()
-            writer.write(dir.getAbpBlackListFile(entity), set.blackList)
-            writer.write(dir.getAbpWhiteListFile(entity), set.whiteList)
-            writer.write(dir.getAbpWhitePageListFile(entity), set.whitePageList)
+        val writer = FilterWriter()
+        writer.write(dir.getAbpBlackListFile(entity), set.blackList)
+        writer.write(dir.getAbpWhiteListFile(entity), set.whiteList)
+        writer.write(dir.getAbpWhitePageListFile(entity), set.elementDisableFilter)
 
-            val elementWriter = ElementWriter()
-            elementWriter.write(dir.getAbpElementListFile(entity), set.elementList)
+        val elementWriter = ElementWriter()
+        elementWriter.write(dir.getAbpElementListFile(entity), set.elementList)
 
-            abpDatabase.abpDao().update(entity)
-        } catch (e: IOException) {
-            e.printStackTrace()
-        }
+        abpDatabase.abpDao().update(entity)
         return true
     }
 
     private fun FilterWriter.write(file: File, list: List<UnifiedFilter>) {
         if (list.isNotEmpty()) {
-            file.outputStream().buffered().use {
-                write(it, list)
+            try {
+                file.outputStream().buffered().use {
+                    write(it, list)
+                }
+            } catch (e: IOException) {
+                ErrorReport.printAndWriteLog(e)
             }
         } else {
             if (file.exists()) file.delete()
@@ -249,8 +236,12 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
 
     private fun ElementWriter.write(file: File, list: List<ElementFilter>) {
         if (list.isNotEmpty()) {
-            file.outputStream().buffered().use {
-                write(it, list)
+            try {
+                file.outputStream().buffered().use {
+                    write(it, list)
+                }
+            } catch (e: IOException) {
+                ErrorReport.printAndWriteLog(e)
             }
         } else {
             if (file.exists()) file.delete()
@@ -272,17 +263,26 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
         private const val AN_HOUR = 60 * 60 * 1000
         private const val A_DAY = 24 * AN_HOUR
 
+        private const val JOB_ID = 10
+
         fun updateAll(context: Context, forceUpdate: Boolean = false, result: UpdateResult? = null) {
+            if (!forceUpdate) {
+                val prefs = AdBlockPref.get(context.applicationContext)
+                if (prefs.abpNextUpdateTime < System.currentTimeMillis()) return
+
+                if (AppPrefs.abpUpdateWifiOnly.get()) {
+                    val cm = context.getSystemService<ConnectivityManager>()!!
+                    if (!cm.isConnectedWifi()) return
+                }
+            }
+
             val intent = Intent(context, AbpUpdateService::class.java).apply {
                 action = ACTION_UPDATE_ALL
                 putExtra(EXTRA_FORCE_UPDATE, forceUpdate)
                 putExtra(EXTRA_RESULT, result)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+
+            enqueueWork(context, AbpUpdateService::class.java, JOB_ID, intent)
         }
 
         fun update(context: Context, abpEntity: AbpEntity, result: UpdateResult? = null) {
@@ -291,11 +291,8 @@ class AbpUpdateService : DaggerIntentService("AbpUpdateService") {
                 putExtra(EXTRA_ABP_ENTRY, abpEntity)
                 putExtra(EXTRA_RESULT, result)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+
+            enqueueWork(context, AbpUpdateService::class.java, JOB_ID, intent)
         }
     }
 

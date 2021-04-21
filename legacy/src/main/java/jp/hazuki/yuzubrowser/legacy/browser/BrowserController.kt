@@ -25,7 +25,7 @@ import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import com.google.android.material.appbar.AppBarLayout
-import jp.hazuki.yuzubrowser.legacy.action.ActionNameArray
+import jp.hazuki.yuzubrowser.legacy.action.ActionNameMap
 import jp.hazuki.yuzubrowser.legacy.action.item.AutoPageScrollAction
 import jp.hazuki.yuzubrowser.legacy.action.item.OpenOptionsMenuAction
 import jp.hazuki.yuzubrowser.legacy.action.item.TabListSingleAction
@@ -55,7 +55,7 @@ interface BrowserController : BrowserInfo {
     fun showTabList(action: TabListSingleAction)
     fun showTabHistory(target: Int)
     fun restoreTab()
-    fun showSearchBox(query: String, target: Int, openNewTab: Boolean, reverse: Boolean)
+    fun showSearchBox(query: String, target: Int, openTabType: Int, reverse: Boolean)
     fun showSubGesture()
     fun showMenu(button: View?, action: OpenOptionsMenuAction)
     fun finishAlert(clearTabNo: Int)
@@ -81,6 +81,9 @@ interface BrowserController : BrowserInfo {
     fun requestAdjustWebView()
     fun expandToolbar()
     fun adjustBrowserPadding(tab: MainTabData)
+    fun onPageFinished()
+    suspend fun requestLocationPermission(): Boolean
+    suspend fun requestStoragePermission(): Boolean
 
     val secretKey: String
     val tabManager: TabManager
@@ -95,7 +98,7 @@ interface BrowserController : BrowserInfo {
     override val currentTabData: MainTabData?
         get() = tabManager.currentTabData
     val pagePaddingHeight: Int
-    val actionNameArray: ActionNameArray
+    val actionNameArray: ActionNameMap
     val webRtcRequest: WebRtcRequest
     val printManager: PrintManager
     val okHttpClient: OkHttpClient

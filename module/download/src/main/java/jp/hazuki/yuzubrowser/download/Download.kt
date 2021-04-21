@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,11 +19,12 @@ package jp.hazuki.yuzubrowser.download
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import jp.hazuki.yuzubrowser.core.utility.storage.toDocumentFile
 import jp.hazuki.yuzubrowser.core.utility.utils.ui
 import jp.hazuki.yuzubrowser.download.core.data.DownloadFile
 import jp.hazuki.yuzubrowser.download.core.data.MetaData
 import jp.hazuki.yuzubrowser.download.core.utils.guessDownloadFileName
-import jp.hazuki.yuzubrowser.download.core.utils.toDocumentFile
 import jp.hazuki.yuzubrowser.download.service.DownloadService
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -70,6 +71,10 @@ fun Context.reDownload(id: Long) {
         putExtra(INTENT_EXTRA_DOWNLOAD_ID, id)
     }
     startService(intent)
+}
+
+internal fun checkValidRootDir(root: Uri): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || root.scheme != "file"
 }
 
 fun String.convertToTmpDownloadUrl(): String {

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2020 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,22 @@
 package jp.hazuki.yuzubrowser.legacy.settings.activity
 
 import android.app.Activity
+import android.app.Dialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.fragment.app.DialogFragment
 import androidx.preference.Preference
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreference
 import jp.hazuki.yuzubrowser.adblock.ui.original.AdBlockActivity
-import jp.hazuki.yuzubrowser.core.utility.extensions.canResolvePath
-import jp.hazuki.yuzubrowser.download.ui.FallbackFolderSelectActivity
+import jp.hazuki.yuzubrowser.core.utility.storage.DEFAULT_DOWNLOAD_PATH
 import jp.hazuki.yuzubrowser.legacy.R
+import jp.hazuki.yuzubrowser.ui.extensions.registerForStartActivityForResult
 import jp.hazuki.yuzubrowser.ui.preference.StrToIntListPreference
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
-import org.jetbrains.anko.longToast
 
 class BrowserSettingsFragment : YuzuPreferenceFragment() {
 
@@ -38,8 +41,8 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
     override fun onCreateYuzuPreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.pref_browser_settings)
 
-        val pref = findPreference("search_suggest") as StrToIntListPreference
-        val suggest = findPreference("search_suggest_engine")
+        val pref = findPreference<StrToIntListPreference>("search_suggest")!!
+        val suggest = findPreference<Preference>("search_suggest_engine")!!
 
         suggest.isEnabled = pref.value != 2
 
@@ -48,8 +51,8 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
             true
         }
 
-        val savePinned = findPreference("save_pinned_tabs")
-        val saveLast = findPreference("save_last_tabs") as SwitchPreference
+        val savePinned = findPreference<Preference>("save_pinned_tabs")!!
+        val saveLast = findPreference<SwitchPreference>("save_last_tabs")!!
 
         savePinned.isEnabled = !saveLast.isChecked
         saveLast.setOnPreferenceChangeListener { _, newValue ->
@@ -57,17 +60,13 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
             true
         }
 
-        findPreference("ad_block_settings").setOnPreferenceClickListener {
+        findPreference<Preference>("ad_block_settings")!!.setOnPreferenceClickListener {
             startActivity(Intent(activity, AdBlockActivity::class.java))
             true
         }
 
-        findPreference("download_folder").setOnPreferenceClickListener {
-            try {
-                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_FOLDER)
-            } catch (e: Exception) {
-                startActivityForResult(Intent(activity, FallbackFolderSelectActivity::class.java), REQUEST_FOLDER)
-            }
+        findPreference<Preference>("download_folder")!!.setOnPreferenceClickListener {
+            DownloadFolderDialog(AppPrefs.download_folder.get()).show(childFragmentManager, "")
             true
         }
     }
@@ -84,21 +83,7 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
         when (requestCode) {
             REQUEST_FOLDER -> {
                 val activity = activity ?: return
-                if (resultCode != Activity.RESULT_OK || data == null) return
 
-                val uri = data.data ?: return
-
-                if (uri.scheme == "content") {
-                    activity.contentResolver.takePersistableUriPermission(uri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-                }
-
-                AppPrefs.download_folder.set(uri.toString())
-                AppPrefs.commit(activity, AppPrefs.download_folder)
-
-                if (!uri.canResolvePath(activity)) {
-                    activity.longToast(R.string.pref_storage_location_warn)
-                }
             }
         }
     }
@@ -115,6 +100,37 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
         replaceFragment = null
     }
 
+    private fun selectDownloadDirectory(isDefault: Boolean) {
+        if (isDefault) {
+            saveDownloadFolder(DEFAULT_DOWNLOAD_PATH)
+        } else {
+            try {
+                downloadDirectoryLauncher.launch(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), R.string.failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private val downloadDirectoryLauncher = registerForStartActivityForResult {
+        if (it.resultCode != Activity.RESULT_OK) return@registerForStartActivityForResult
+
+        val uri = it.data?.data ?: return@registerForStartActivityForResult
+
+        val context = requireContext()
+        if (uri.scheme == "content") {
+            context.contentResolver.takePersistableUriPermission(uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        }
+
+        saveDownloadFolder(uri.toString())
+    }
+
+    private fun saveDownloadFolder(directory: String) {
+        AppPrefs.download_folder.set(directory)
+        AppPrefs.commit(context, AppPrefs.download_folder)
+    }
+
     companion object {
         private const val REQUEST_FOLDER = 1
     }
@@ -128,10 +144,10 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
         override fun onCreateYuzuPreferences(savedInstanceState: Bundle?, rootKey: String?) {
             setPreferencesFromResource(R.xml.pref_browser_settings, "ps_search")
 
-            val suggestMode = findPreference("search_suggest") as StrToIntListPreference
-            suggestEngine = findPreference("search_suggest_engine")
-            suggestHistory = findPreference("search_suggest_histories")
-            suggestBookmark = findPreference("search_suggest_bookmarks")
+            val suggestMode = findPreference<StrToIntListPreference>("search_suggest")!!
+            suggestEngine = findPreference("search_suggest_engine")!!
+            suggestHistory = findPreference("search_suggest_histories")!!
+            suggestBookmark = findPreference("search_suggest_bookmarks")!!
 
             setSuggestEnable(suggestMode.value)
             suggestMode.setOnPreferenceChangeListener { _, newValue ->
@@ -145,6 +161,34 @@ class BrowserSettingsFragment : YuzuPreferenceFragment() {
             suggestEngine.isEnabled = enable
             suggestHistory.isEnabled = enable
             suggestBookmark.isEnabled = enable
+        }
+    }
+
+    class DownloadFolderDialog : DialogFragment() {
+
+        override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+            val uri = requireArguments().getString(ARG_URI)
+            val selection = if (uri.isNullOrEmpty() || uri == DEFAULT_DOWNLOAD_PATH) 0 else 1
+            val items = arrayOf(getString(R.string.default_text), getString(R.string.custom))
+
+            return AlertDialog.Builder(requireActivity())
+                .setTitle(R.string.pref_download_folder)
+                .setSingleChoiceItems(items, selection) { dialog, which ->
+                    (parentFragment as BrowserSettingsFragment).selectDownloadDirectory(which == 0)
+                    dialog.dismiss()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .create()
+        }
+
+        companion object {
+            private const val ARG_URI = "uri"
+
+            operator fun invoke(uri: String) = DownloadFolderDialog().apply {
+                arguments = Bundle().apply {
+                    putString(ARG_URI, uri)
+                }
+            }
         }
     }
 }

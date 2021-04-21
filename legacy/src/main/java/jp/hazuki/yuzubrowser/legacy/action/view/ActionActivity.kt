@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,22 +19,24 @@ package jp.hazuki.yuzubrowser.legacy.action.view
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import android.view.Menu
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import jp.hazuki.yuzubrowser.core.utility.log.Logger
 import jp.hazuki.yuzubrowser.legacy.Constants
 import jp.hazuki.yuzubrowser.legacy.R
 import jp.hazuki.yuzubrowser.legacy.action.*
+import jp.hazuki.yuzubrowser.legacy.databinding.ActionActivityBinding
 import jp.hazuki.yuzubrowser.ui.app.OnActivityResultListener
 import jp.hazuki.yuzubrowser.ui.app.StartActivityInfo
 import jp.hazuki.yuzubrowser.ui.app.ThemeActivity
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import jp.hazuki.yuzubrowser.ui.widget.recycler.OnRecyclerListener
-import kotlinx.android.synthetic.main.action_activity.*
 
 class ActionActivity : ThemeActivity(), OnRecyclerListener {
 
@@ -46,9 +48,12 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
     private lateinit var mAction: Action
     private lateinit var adapter: ActionNameArrayAdapter
 
+    private lateinit var binding: ActionActivityBinding
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.action_activity)
+        binding = ActionActivityBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         val intent = intent ?: throw NullPointerException("intent is null")
 
@@ -56,16 +61,23 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
             val fullscreen = intent.getBooleanExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, AppPrefs.fullscreen.get())
             val orientation = intent.getIntExtra(Constants.intent.EXTRA_MODE_ORIENTATION, AppPrefs.oritentation.get())
 
-            if (fullscreen)
-                window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            if (fullscreen) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    window.insetsController?.hide(WindowInsets.Type.statusBars())
+                } else {
+                    @Suppress("DEPRECATION")
+                    window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+                }
+            }
             requestedOrientation = orientation
         }
 
-        actionNameArray = intent.getParcelableExtra(ActionNameArray.INTENT_EXTRA) ?: ActionNameArray(applicationContext)
+        actionNameArray = intent.getParcelableExtra(ActionNameArray.INTENT_EXTRA)
+            ?: ActionNameArray(this)
 
         adapter = ActionNameArrayAdapter(this, actionNameArray, this)
-        recyclerView.layoutManager = LinearLayoutManager(this)
-        recyclerView.adapter = adapter
+        binding.recyclerView.layoutManager = LinearLayoutManager(this)
+        binding.recyclerView.adapter = adapter
 
         val mActionType = intent.getIntExtra(ActionManager.INTENT_EXTRA_ACTION_TYPE, 0)
         mActionId = intent.getIntExtra(ActionManager.INTENT_EXTRA_ACTION_ID, 0)
@@ -100,10 +112,10 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
         adapter.notifyDataSetChanged()
 
         if (initialPosition != -1)
-            recyclerView.scrollToPosition(initialPosition)
+            binding.recyclerView.scrollToPosition(initialPosition)
 
-        okButton.setOnClickListener {
-            when (mActionManager) {
+        binding.okButton.setOnClickListener {
+            when (val actionManager = mActionManager) {
                 null -> {
                     val intent1 = Intent()
                     intent1.putExtra(EXTRA_ACTION, mAction as Parcelable?)
@@ -111,14 +123,14 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
                     setResult(Activity.RESULT_OK, intent1)
                 }
                 is SingleActionManager -> {
-                    val list = (mActionManager as SingleActionManager).getAction(mActionId)
+                    val list = actionManager.getAction(mActionId)
                     list.clear()
                     list.addAll(mAction)
                     mActionManager!!.save(applicationContext)
                     setResult(Activity.RESULT_OK)
                 }
                 is ListActionManager -> {
-                    (mActionManager as ListActionManager).addAction(mActionId, mAction)
+                    actionManager.addAction(mActionId, mAction)
                     mActionManager!!.save(applicationContext)
                     setResult(Activity.RESULT_OK)
                 }
@@ -126,17 +138,17 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
             finish()
         }
 
-        okButton.setOnLongClickListener {
+        binding.okButton.setOnLongClickListener {
             startJsonStringActivity()
             false
         }
 
-        resetButton.setOnClickListener {
+        binding.resetButton.setOnClickListener {
             mAction.clear()
             adapter.clearChoices()
         }
 
-        cancelButton.setOnClickListener { finish() }
+        binding.cancelButton.setOnClickListener { finish() }
 
         adapter.setListener(this::showSubPreference)
     }
@@ -200,7 +212,7 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
                 mOnActivityResultListener = null
             }
             RESULT_REQUEST_JSON -> if (resultCode == Activity.RESULT_OK && data != null) {
-                val result = data.getParcelableExtra<Action>(ActionStringActivity.EXTRA_ACTION)
+                val result = data.getParcelableExtra<Action>(ActionStringActivity.EXTRA_ACTION)!!
                 mAction.clear()
                 mAction.addAll(result)
 
@@ -221,8 +233,9 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
                 }
                 adapter.notifyDataSetChanged()
                 if (initialPosition != -1)
-                    recyclerView.scrollToPosition(initialPosition)
+                    binding.recyclerView.scrollToPosition(initialPosition)
             }
+            else -> super.onActivityResult(requestCode, resultCode, data)
         }
     }
 
@@ -327,7 +340,7 @@ class ActionActivity : ThemeActivity(), OnRecyclerListener {
 
         @JvmStatic
         fun getActionFromIntent(intent: Intent): Action {
-            return intent.getParcelableExtra(EXTRA_ACTION)
+            return intent.getParcelableExtra(EXTRA_ACTION)!!
         }
 
         @JvmStatic

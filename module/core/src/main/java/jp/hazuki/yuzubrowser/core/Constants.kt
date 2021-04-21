@@ -20,3 +20,8 @@ package jp.hazuki.yuzubrowser.core
 const val MIME_TYPE_UNKNOWN = "application/octet-stream"
 const val MIME_TYPE_MHTML = "multipart/related"
 const val MIME_TYPE_HTML = "text/html"
+
+const val READER_FONT_NAME = "reader_font.bin"
+
+const val THEME_DIR = "theme"
+const val USER_AGENT_PC = "yuzu://useragent/type/pc"

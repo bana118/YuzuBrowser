@@ -1,5 +1,5 @@
 <!--
-  ~ Copyright (C) 2017-2019 Hazuki
+  ~ Copyright (C) 2017-2021 Hazuki
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -35,10 +35,16 @@
     <string name="confirm_delete_all_displayed_item">Delete all displayed items?</string>
     <string name="confirm_delete_all_favicon">Delete all favicon?</string>
     <string name="confirm_delete_bookmark">Delete this bookmark?</string>
+    <string name="confirm_delete_download">Delete this file from device?</string>
+    <string name="confirm_delete_download_list">Delete this file from list?</string>
     <string name="confirm_delete_button">Delete this button?</string>
     <string name="confirm_delete_speedDial">Delete this speed dial?</string>
     <string name="confirm_delete_gesture">Delete this gesture?</string>
     <string name="confirm_delete_search_url">Delete this search URL?</string>
+    <plurals name="confirm_delete_multiple">
+        <item quantity="one">Are you sure you wish to delete the selected item?</item>
+        <item quantity="other">Are you sure you wish to delete the selected items?</item>
+    </plurals>
     <string name="delete_history">Delete history</string>
     <string name="delete_all_history">Delete all history</string>
     <string name="delete_all_displayed_item">Delete all displayed items</string>
@@ -55,6 +61,7 @@
     <string name="minimize">Minimize</string>
     <string name="open">Open</string>
     <string name="open_new">Open in new tab</string>
+    <string name="open_current">Open in current tab</string>
     <string name="open_bg">Open in background tab</string>
     <string name="open_new_right">Open in right new tab</string>
     <string name="open_bg_right">Open in right background tab</string>
@@ -203,6 +210,8 @@
     <string name="cannot_access_folder">Access denied</string>
     <string name="add_by_edit">Add by direct input</string>
     <string name="add_from_file">Add from file</string>
+    <string name="from_theme_file">Theme file</string>
+    <string name="from_theme_folder">Theme directory</string>
     <string name="set_folder_path">Set current path</string>
     <string name="go_data_folder">Go to data directory</string>
     <string name="go_sd_folder">Go to external storage</string>
@@ -214,7 +223,7 @@
     <string name="multi_select">Multi select</string>
     <string name="select_this_item">Select this item</string>
     <string name="save_to">Save to</string>
-    <string name="saved_file">Saved :</string>
+    <string name="saved_file">Saved</string>
     <string name="savepage_save_archive">Save as Web Archive MHTML</string>
     <string name="action_easy_add">Easy addition</string>
     <string name="resblock_is_white">Do not block</string>
@@ -227,6 +236,7 @@
     <string name="refresh">Refresh</string>
 
     <string name="default_text">Default</string>
+    <string name="custom">Custom</string>
     <string name="delete">Delete</string>
 
     <string name="find_on_page">Find on page</string>
@@ -251,9 +261,10 @@
     <string name="download_notify">Download state</string>
 
     <string name="permission_probrem">Insufficient permission</string>
-    <string name="request_permission_storage_setting">Please tap [access right] and enable storage</string>
+    <string name="request_permission_storage_setting">Please tap [Permissions] and enable storage</string>
     <string name="confirm_permission_storage">You need storage access to use this function</string>
     <string name="confirm_permission_storage_app">You need storage access to use this app</string>
+    <string name="request_permission_location_setting">Please tap [Permissions] and enable location</string>
 
     <string name="not_bookmark_file">This file is not bookmark html file.</string>
 
@@ -264,6 +275,9 @@
     <string name="unknown">Unknown</string>
     <string name="delete_mf_gesture">Delete multi touch gesture</string>
     <string name="confirm_delete_mf_gesture">Delete this gesture?</string>
+    <string name="theme_import">Import theme</string>
+    <string name="theme_management">Theme management</string>
+    <string name="delete_theme">Delete themes</string>
     <string name="theme_importer">Yuzu Browser theme importer</string>
     <string name="theme_imported">%1$s is imported.</string>
     <string name="theme_installed_version">This version of theme is already installed.</string>
@@ -328,4 +342,5 @@
     <string name="add_filter">Add filter</string>
     <string name="site">Site</string>
     <string name="updating_ad_filters">Updating Ad block filters</string>
+    <string name="do_nothing">Do nothing</string>
 </resources>

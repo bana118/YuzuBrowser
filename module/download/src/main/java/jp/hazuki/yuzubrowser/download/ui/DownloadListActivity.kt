@@ -16,8 +16,11 @@
 
 package jp.hazuki.yuzubrowser.download.ui
 
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowInsets
 import android.view.WindowManager
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.download.R
 import jp.hazuki.yuzubrowser.download.core.data.DownloadFileInfo
 import jp.hazuki.yuzubrowser.download.service.connection.ActivityClient
@@ -25,15 +28,18 @@ import jp.hazuki.yuzubrowser.download.service.connection.ServiceSocket
 import jp.hazuki.yuzubrowser.download.ui.fragment.DownloadListFragment
 import jp.hazuki.yuzubrowser.ui.INTENT_EXTRA_MODE_FULLSCREEN
 import jp.hazuki.yuzubrowser.ui.INTENT_EXTRA_MODE_ORIENTATION
-import jp.hazuki.yuzubrowser.ui.app.DaggerThemeActivity
+import jp.hazuki.yuzubrowser.ui.app.ThemeActivity
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 
-class DownloadListActivity : DaggerThemeActivity(), ActivityClient.ActivityClientListener, DownloadCommandController {
+@AndroidEntryPoint
+class DownloadListActivity : ThemeActivity(), ActivityClient.ActivityClientListener, DownloadCommandController {
 
     private lateinit var downloadService: ServiceSocket
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.fragment_base)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         var fullscreen = AppPrefs.fullscreen.get()
         var orientation = AppPrefs.oritentation.get()
@@ -41,15 +47,17 @@ class DownloadListActivity : DaggerThemeActivity(), ActivityClient.ActivityClien
             fullscreen = intent.getBooleanExtra(INTENT_EXTRA_MODE_FULLSCREEN, fullscreen)
             orientation = intent.getIntExtra(INTENT_EXTRA_MODE_ORIENTATION, orientation)
         }
-        if (fullscreen)
-            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (fullscreen) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.hide(WindowInsets.Type.statusBars())
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            }
+        }
         requestedOrientation = orientation
 
         downloadService = ServiceSocket(this, this)
-
-
-        setContentView(R.layout.fragment_base)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()

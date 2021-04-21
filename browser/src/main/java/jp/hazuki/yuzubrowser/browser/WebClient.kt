@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,32 +27,24 @@ import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Message
-import android.text.TextUtils
 import android.view.View
 import android.webkit.*
 import android.widget.TextView
 import android.widget.Toast
-import com.crashlytics.android.Crashlytics
-import jp.hazuki.yuzubrowser.adblock.AdBlockController
-import jp.hazuki.yuzubrowser.adblock.convertToAdBlockContentType
+import jp.hazuki.yuzubrowser.adblock.*
 import jp.hazuki.yuzubrowser.adblock.filter.mining.MiningProtector
-import jp.hazuki.yuzubrowser.adblock.isThirdParty
 import jp.hazuki.yuzubrowser.adblock.repository.abp.AbpDatabase
 import jp.hazuki.yuzubrowser.adblock.ui.abp.AbpFilterSubscribeDialog
 import jp.hazuki.yuzubrowser.adblock.ui.original.AdBlockActivity
 import jp.hazuki.yuzubrowser.bookmark.view.BookmarkActivity
 import jp.hazuki.yuzubrowser.core.cache.SoftCache
-import jp.hazuki.yuzubrowser.core.utility.extensions.appCacheFilePath
-import jp.hazuki.yuzubrowser.core.utility.extensions.getFakeChromeUserAgent
-import jp.hazuki.yuzubrowser.core.utility.extensions.getResColor
-import jp.hazuki.yuzubrowser.core.utility.extensions.readAssetsText
+import jp.hazuki.yuzubrowser.core.utility.extensions.*
 import jp.hazuki.yuzubrowser.core.utility.log.Logger
+import jp.hazuki.yuzubrowser.core.utility.utils.ui
+import jp.hazuki.yuzubrowser.download.*
 import jp.hazuki.yuzubrowser.download.core.data.DownloadFile
 import jp.hazuki.yuzubrowser.download.core.data.DownloadRequest
-import jp.hazuki.yuzubrowser.download.download
-import jp.hazuki.yuzubrowser.download.getBlobDownloadJavaScript
-import jp.hazuki.yuzubrowser.download.getDownloadFolderUri
-import jp.hazuki.yuzubrowser.download.getImage
+import jp.hazuki.yuzubrowser.download.core.data.EncodedImage
 import jp.hazuki.yuzubrowser.download.ui.DownloadListActivity
 import jp.hazuki.yuzubrowser.download.ui.FastDownloadActivity
 import jp.hazuki.yuzubrowser.download.ui.fragment.DownloadDialog
@@ -87,28 +79,33 @@ import jp.hazuki.yuzubrowser.legacy.utils.WebUtils
 import jp.hazuki.yuzubrowser.legacy.utils.extensions.setClipboardWithToast
 import jp.hazuki.yuzubrowser.legacy.webkit.TabType
 import jp.hazuki.yuzubrowser.legacy.webkit.WebUploadHandler
+import jp.hazuki.yuzubrowser.legacy.webrtc.WebPermissionsDao
 import jp.hazuki.yuzubrowser.legacy.webrtc.WebRtcPermission
-import jp.hazuki.yuzubrowser.ui.BrowserApplication
 import jp.hazuki.yuzubrowser.ui.dialog.JsAlertDialog
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 import jp.hazuki.yuzubrowser.ui.settings.PreferenceConstants
 import jp.hazuki.yuzubrowser.ui.theme.ThemeData
+import jp.hazuki.yuzubrowser.ui.utils.checkStoragePermission
+import jp.hazuki.yuzubrowser.ui.widget.longToast
 import jp.hazuki.yuzubrowser.webview.CustomWebChromeClient
 import jp.hazuki.yuzubrowser.webview.CustomWebView
 import jp.hazuki.yuzubrowser.webview.CustomWebViewClient
 import jp.hazuki.yuzubrowser.webview.WebViewRenderingManager
 import jp.hazuki.yuzubrowser.webview.utility.WebViewUtility
-import jp.hazuki.yuzubrowser.webview.utility.evaluateJavascript
 import jp.hazuki.yuzubrowser.webview.utility.getUserAgent
-import org.jetbrains.anko.longToast
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import java.net.URISyntaxException
 import java.text.DateFormat
+import java.util.*
 import kotlin.concurrent.thread
 
 class WebClient(
     private val activity: BrowserBaseActivity,
     private val controller: BrowserController,
     private val abpDatabase: AbpDatabase,
+    private val webPermissionsDao: WebPermissionsDao,
     faviconManager: FaviconManager
 ) : WebViewUtility {
     private val patternManager = PatternUrlManager(activity.applicationContext)
@@ -117,7 +114,6 @@ class WebClient(
     private val faviconManager = FaviconAsyncManager(faviconManager)
     private val webViewRenderingManager = WebViewRenderingManager()
     private val scrollableToolbarHeight = { controller.appBarLayout.totalScrollRange + controller.pagePaddingHeight }
-    private val safeFileProvider = (activity.applicationContext as BrowserApplication).providerManager.safeFileProvider
     private var browserHistoryManager: BrowserHistoryAsyncManager? = null
     private var resourceCheckerList: ArrayList<ResourceChecker>? = null
     private var adBlockController: AdBlockController? = null
@@ -162,10 +158,6 @@ class WebClient(
 
     fun updateAdBlockList() {
         adBlockController?.update()
-    }
-
-    fun onStop() {
-        adBlockController?.onResume()
     }
 
     fun destroy() {
@@ -251,9 +243,9 @@ class WebClient(
         web.setMyWebChromeClient(MyWebChromeClient())
         web.setMyWebViewClient(mWebViewClient)
 
-        web.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+        web.setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
             onDownloadStart(web, url, userAgent, contentDisposition, mimetype, contentLength)
-        })
+        }
 
         val setting = web.webSettings
         setting.setNeedInitialFocus(false)
@@ -269,15 +261,9 @@ class WebClient(
 
 
         setting.allowContentAccess = AppPrefs.allow_content_access.get()
-        setting.allowFileAccess = AppPrefs.file_access.get() == PreferenceConstants.FILE_ACCESS_ENABLE
         setting.defaultTextEncodingName = AppPrefs.default_encoding.get()
-        if (AppPrefs.user_agent.get().isNullOrEmpty()) {
-            if (AppPrefs.fake_chrome.get()) {
-                setting.userAgentString = activity.getFakeChromeUserAgent()
-            }
-        } else {
-            setting.userAgentString = AppPrefs.user_agent.get()
-        }
+        setting.userAgentString =
+            activity.getRealUserAgent(AppPrefs.user_agent.get(), AppPrefs.fake_chrome.get())
         setting.loadWithOverviewMode = AppPrefs.load_overview.get()
         setting.useWideViewPort = AppPrefs.web_wideview.get()
         setting.displayZoomButtons = AppPrefs.show_zoom_button.get()
@@ -291,6 +277,7 @@ class WebClient(
         setting.domStorageEnabled = noPrivate && AppPrefs.web_dom_db.get()
         setting.geolocationEnabled = noPrivate && AppPrefs.web_geolocation.get()
         setting.appCacheEnabled = noPrivate && AppPrefs.web_app_cache.get()
+        setting.webTheme = AppPrefs.webTheme.get()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             setting.safeBrowsingEnabled = AppPrefs.safe_browsing.get()
@@ -319,13 +306,9 @@ class WebClient(
             controller.performNewTabLink(BrowserManager.LOAD_URL_TAB_NEW_RIGHT, tab, url, TabType.WINDOW)
             return
         }
-        val newUrl = if (AppPrefs.file_access.get() == PreferenceConstants.FILE_ACCESS_SAFER && URLUtil.isFileUrl(url))
-            safeFileProvider.convertToSaferUrl(url)
-        else
-            url
-        if (!checkUrl(tab, newUrl, Uri.parse(newUrl))) {
+        if (!checkUrl(tab, url, Uri.parse(url))) {
             if (!checkLoadPagePatternMatch(tab, url, handleOpenInBrowser))
-                tab.mWebView.loadUrl(newUrl)
+                tab.mWebView.loadUrl(url)
         }
     }
 
@@ -348,10 +331,6 @@ class WebClient(
         override fun shouldOverrideUrlLoading(web: CustomWebView, url: String, uri: Uri): Boolean {
             val data = controller.getTabOrNull(web) ?: return true
 
-            if (AppPrefs.file_access.get() == PreferenceConstants.FILE_ACCESS_SAFER && URLUtil.isFileUrl(url)) {
-                controller.loadUrl(data, safeFileProvider.convertToSaferUrl(url))
-                return true
-            }
             val patternResult = checkLoadPagePatternMatch(data, url, false)
 
             if (patternResult || checkNewTabLinkAuto(getNewTabPerformType(data), data, url)) {
@@ -398,17 +377,14 @@ class WebClient(
             controller.tabManager.removeThumbnailCache(url)
         }
 
-        override fun onPageCommitVisible(web: CustomWebView, url: String) {
+        override fun onDomContentLoaded(web: CustomWebView) {
             val data = controller.getTabOrNull(web) ?: return
-            applyJavascriptInjection(data, web, url)
+            applyJavascriptInjection(data, web, data.url ?: web.url ?: "")
         }
 
         override fun onPageFinished(web: CustomWebView, url: String) {
+            controller.onPageFinished()
             val data = controller.getTabOrNull(web) ?: return
-
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-                applyJavascriptInjection(data, web, url)
-            }
             applyUserScript(web, url, UserScript.RunAt.IDLE)
 
             if (controller.isActivityPaused) {
@@ -437,11 +413,18 @@ class WebClient(
                     if (iconUrl.isEmpty() || iconUrl == "null") {
                         speedDialManager.updateAsync(data.originalUrl, faviconManager[data.originalUrl])
                     } else {
-                        val userAgent = data.mWebView.getUserAgent()
-                        thread {
-                            speedDialManager.updateAsync(data.originalUrl,
-                                controller.okHttpClient
-                                    .getImage(iconUrl, userAgent, url, CookieManager.getInstance().getCookie(url)))
+                        if (iconUrl.startsWith("data", ignoreCase = true)) {
+                            EncodedImage(iconUrl)?.let { image ->
+                                speedDialManager.updateAsync(data.originalUrl, image.image)
+                            }
+                        } else {
+                            val userAgent = data.mWebView.getUserAgent()
+                            GlobalScope.launch(Dispatchers.IO) {
+                                val cookie = CookieManager.getInstance().getCookie(url)
+                                val icon = controller.okHttpClient
+                                    .getImage(iconUrl, userAgent, url, cookie)
+                                speedDialManager.updateAsync(data.originalUrl, icon)
+                            }
                         }
                     }
                 }
@@ -457,8 +440,10 @@ class WebClient(
                 web.evaluateJavascript(invertEnableJs, null)
             }
             val adBlockController = adBlockController
-            if (adBlockController != null && adBlockController.isElementHideEnabled) {
-                web.evaluateJavascript(AdBlockController.INJECT_HIDE_STYLE, null)
+            if (adBlockController != null) {
+                adBlockController.loadScript(Uri.parse(url))?.let {
+                    web.evaluateJavascript(it, null)
+                }
             }
 
             applyUserScript(web, url, UserScript.RunAt.END)
@@ -479,12 +464,12 @@ class WebClient(
 
         override fun onFormResubmission(web: CustomWebView, dontResend: Message, resend: Message) {
             AlertDialog.Builder(activity)
-                    .setTitle(web.url)
-                    .setMessage(R.string.form_resubmit)
-                    .setPositiveButton(android.R.string.yes) { _, _ -> resend.sendToTarget() }
-                    .setNegativeButton(android.R.string.no) { _, _ -> dontResend.sendToTarget() }
-                    .setOnCancelListener { dontResend.sendToTarget() }
-                    .show()
+                .setTitle(web.url)
+                .setMessage(R.string.form_resubmit)
+                .setPositiveButton(android.R.string.ok) { _, _ -> resend.sendToTarget() }
+                .setNegativeButton(android.R.string.cancel) { _, _ -> dontResend.sendToTarget() }
+                .setOnCancelListener { dontResend.sendToTarget() }
+                .show()
         }
 
         override fun doUpdateVisitedHistory(web: CustomWebView, url: String, isReload: Boolean) {
@@ -521,12 +506,12 @@ class WebClient(
                 view.findViewById<TextView>(R.id.messageTextView).text = activity.getString(R.string.ssl_error_mes, error.getErrorMessages(activity))
 
                 AlertDialog.Builder(activity)
-                        .setTitle(R.string.ssl_error_title)
-                        .setView(view)
-                        .setPositiveButton(android.R.string.yes) { _, _ -> handler.proceed() }
-                        .setNegativeButton(android.R.string.no) { _, _ -> handler.cancel() }
-                        .setOnCancelListener { handler.cancel() }
-                        .show()
+                    .setTitle(R.string.ssl_error_title)
+                    .setView(view)
+                    .setPositiveButton(android.R.string.ok) { _, _ -> handler.proceed() }
+                    .setNegativeButton(android.R.string.cancel) { _, _ -> handler.cancel() }
+                    .setOnCancelListener { handler.cancel() }
+                    .show()
             }
         }
 
@@ -547,37 +532,35 @@ class WebClient(
                 }
             }
 
+            if ("file".equals(request.url.scheme, ignoreCase = true)) {
+                return WebResourceResponse("text/text", "UTF-8", EmptyInputStream())
+            }
+
             val tabIndexData = controller.tabManager.getIndexData(web.identityId) ?: return null
             val uri = Uri.parse(tabIndexData.url ?: "")
 
             adBlockController?.run {
                 val host = uri.host
                 if (host != null) {
-                    val isThird = request.isThirdParty(host)
-                    val contentType = request.convertToAdBlockContentType(uri.toString())
-                    if (!isWhitePage(uri, contentType, isThird)) {
-                        if (request.url.host == "adblock" && request.url.path == "/hideElement.css") {
-                            return createElementHideStyle(uri)
-                        }
-                        try {
-                            val result = isBlock(uri, request.url, contentType, isThird)
-                            if (result != null) {
-                                return if (request.isForMainFrame) {
-                                    createMainFrameDummy(activity, request.url, result.pattern)
-                                } else {
-                                    createDummy(request.url)
-                                }
+                    if (request.isForMainFrame) {
+                        web.isBlock = !isWhitePage(request.url)
+                    }
+
+                    if (web.isBlock) {
+                        val filter = isBlock(request.getContentRequest(uri ?: Uri.parse("")))
+                        if (filter != null) {
+                            return if (request.isForMainFrame) {
+                                createMainFrameDummy(activity, request.url, filter.pattern)
+                            } else {
+                                createDummy(request.url)
                             }
-                        } catch (e: Exception) {
-                            Crashlytics.logException(e)
-                            throw e
                         }
                     }
                 }
             }
 
             miningProtector?.run {
-                if (isBlock(uri, request.url)) {
+                if (isBlock(request.getContentRequest(uri ?: Uri.parse("")))) {
                     return dummy
                 }
             }
@@ -660,7 +643,15 @@ class WebClient(
     private fun onDownloadStart(web: CustomWebView, url: String, userAgent: String, contentDisposition: String, mimetype: String, contentLength: Long) {
         val referrer = web.url
         if (url.startsWith("blob")) {
-            web.evaluateJavascript(activity.getBlobDownloadJavaScript(url, controller.secretKey), null)
+            if (controller.applicationContextInfo.checkStoragePermission()) {
+                web.evaluateJavascript(activity.getBlobDownloadJavaScript(url, controller.secretKey), null)
+            } else {
+                ui {
+                    if (controller.requestStoragePermission()) {
+                        web.evaluateJavascript(activity.getBlobDownloadJavaScript(url, controller.secretKey), null)
+                    }
+                }
+            }
             return
         }
 
@@ -678,18 +669,18 @@ class WebClient(
             PreferenceConstants.DOWNLOAD_SELECT -> {
 
                 AlertDialog.Builder(activity)
-                        .setTitle(R.string.download)
-                        .setItems(
-                                arrayOf(getString(R.string.download), getString(R.string.open), getString(R.string.share))
-                        ) { _, which ->
-                            when (which) {
-                                0 -> actionDownload(url, referrer, userAgent, contentDisposition, mimetype, contentLength)
-                                1 -> actionOpen(url, referrer, userAgent, contentDisposition, mimetype, contentLength)
-                                2 -> actionShare(url)
-                            }
+                    .setTitle(R.string.download)
+                    .setItems(
+                        arrayOf(getString(R.string.download), getString(R.string.open), getString(R.string.share))
+                    ) { _, which ->
+                        when (which) {
+                            0 -> actionDownload(url, referrer, userAgent, contentDisposition, mimetype, contentLength)
+                            1 -> actionOpen(url, referrer, userAgent, contentDisposition, mimetype, contentLength)
+                            2 -> actionShare(url)
                         }
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show()
+                    }
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show()
             }
         }
 
@@ -699,7 +690,15 @@ class WebClient(
     }
 
     private fun actionDownload(url: String, referrer: String?, userAgent: String, contentDisposition: String, mimetype: String, contentLength: Long) {
-        activity.showDialog(DownloadDialog(url, userAgent, contentDisposition, mimetype, contentLength, referrer), "download")
+        if (controller.applicationContextInfo.checkStoragePermission()) {
+            activity.showDialog(DownloadDialog(url, userAgent, contentDisposition, mimetype, contentLength, referrer), "download")
+        } else {
+            ui {
+                if (controller.requestStoragePermission()) {
+                    activity.showDialog(DownloadDialog(url, userAgent, contentDisposition, mimetype, contentLength, referrer), "download")
+                }
+            }
+        }
     }
 
     private fun actionOpen(url: String, referrer: String?, userAgent: String, contentDisposition: String, mimetype: String, contentLength: Long) {
@@ -721,9 +720,6 @@ class WebClient(
             val data = controller.getTabOrNull(web) ?: return
 
             data.onProgressChanged(newProgress)
-            if (newProgress == 100) {
-                CookieManager.getInstance().flush()
-            }
 
             if (data === controller.currentTabData) {
                 if (data.isInPageLoad)
@@ -732,10 +728,9 @@ class WebClient(
                     controller.notifyChangeWebState(data)
             }
 
-            if (data.isStartDocument && newProgress > 35) {
-                val url = data.url
-                if (url != null) applyUserScript(web, url, UserScript.RunAt.START)
+            if (data.isStartDocument) {
                 data.isStartDocument = false
+                web.onPageDocumentStart()
             }
         }
 
@@ -774,7 +769,7 @@ class WebClient(
                 controller.removeTab(i)
         }
 
-        override fun onShowFileChooser(webView: WebView, filePathCallback: ValueCallback<Array<Uri>?>, fileChooserParams: WebChromeClient.FileChooserParams): Boolean {
+        override fun onShowFileChooser(webView: WebView, filePathCallback: ValueCallback<Array<Uri>?>, fileChooserParams: FileChooserParams): Boolean {
             if (webUploadHandler == null)
                 webUploadHandler = WebUploadHandler()
 
@@ -792,11 +787,11 @@ class WebClient(
             val tab = controller.getTabOrNull(view) ?: return true
             if (tab.isAlertAllowed && !activity.isFinishing) {
                 JsAlertDialog(activity)
-                        .setAlertMode(url, message, tab.alertMode == MainTabData.ALERT_MULTIPULE) { dialogResult, blockAlert ->
-                            if (dialogResult) result.confirm() else result.cancel()
-                            if (blockAlert) tab.alertMode = MainTabData.ALERT_BLOCKED
-                        }
-                        .show()
+                    .setAlertMode(url, message, tab.alertMode == MainTabData.ALERT_MULTIPULE) { dialogResult, blockAlert ->
+                        if (dialogResult) result.confirm() else result.cancel()
+                        if (blockAlert) tab.alertMode = MainTabData.ALERT_BLOCKED
+                    }
+                    .show()
                 tab.alertMode = MainTabData.ALERT_MULTIPULE
             } else {
                 result.cancel()
@@ -808,11 +803,11 @@ class WebClient(
             val tab = controller.getTabOrNull(view) ?: return true
             if (tab.isAlertAllowed && !activity.isFinishing) {
                 JsAlertDialog(activity)
-                        .setConfirmMode(url, message, tab.alertMode == MainTabData.ALERT_MULTIPULE) { dialogResult, blockAlert ->
-                            if (dialogResult) result.confirm() else result.cancel()
-                            if (blockAlert) tab.alertMode = MainTabData.ALERT_BLOCKED
-                        }
-                        .show()
+                    .setConfirmMode(url, message, tab.alertMode == MainTabData.ALERT_MULTIPULE) { dialogResult, blockAlert ->
+                        if (dialogResult) result.confirm() else result.cancel()
+                        if (blockAlert) tab.alertMode = MainTabData.ALERT_BLOCKED
+                    }
+                    .show()
                 tab.alertMode = MainTabData.ALERT_MULTIPULE
             } else {
                 result.cancel()
@@ -824,11 +819,11 @@ class WebClient(
             val tab = controller.getTabOrNull(view) ?: return true
             if (tab.isAlertAllowed && !activity.isFinishing) {
                 JsAlertDialog(activity)
-                        .setPromptMode(url, message, defaultValue, tab.alertMode == MainTabData.ALERT_MULTIPULE) { dialogResult, blockAlert ->
-                            if (dialogResult != null) result.confirm(dialogResult) else result.cancel()
-                            if (blockAlert) tab.alertMode = MainTabData.ALERT_BLOCKED
-                        }
-                        .show()
+                    .setPromptMode(url, message, defaultValue, tab.alertMode == MainTabData.ALERT_MULTIPULE) { dialogResult, blockAlert ->
+                        if (dialogResult != null) result.confirm(dialogResult) else result.cancel()
+                        if (blockAlert) tab.alertMode = MainTabData.ALERT_BLOCKED
+                    }
+                    .show()
                 tab.alertMode = MainTabData.ALERT_MULTIPULE
             } else {
                 result.cancel()
@@ -837,7 +832,7 @@ class WebClient(
         }
 
 
-        override fun onShowCustomView(view: View, callback: WebChromeClient.CustomViewCallback) {
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
             controller.showCustomView(view, callback)
         }
 
@@ -856,7 +851,7 @@ class WebClient(
 
         override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
             if (geoView == null) {
-                geoView = object : GeolocationPermissionToolbar(activity) {
+                geoView = object : GeolocationPermissionToolbar(activity, controller) {
                     override fun onHideToolbar() {
                         controller.toolbarManager.hideGeolocationPermissionPrompt(geoView!!)
                         geoView = null
@@ -876,12 +871,10 @@ class WebClient(
         }
 
         override fun onPermissionRequest(request: PermissionRequest) {
-            controller.activity.runOnUiThread {
-                if (AppPrefs.webRtc.get()) {
-                    WebRtcPermission.getInstance(controller.applicationContextInfo).requestPermission(request, controller.webRtcRequest)
-                } else {
-                    request.deny()
-                }
+            if (AppPrefs.webRtc.get()) {
+                WebRtcPermission.getInstance(webPermissionsDao).requestPermission(request, controller.webRtcRequest)
+            } else {
+                ui { request.deny() }
             }
         }
 
@@ -893,7 +886,7 @@ class WebClient(
     private fun checkUrl(data: MainTabData, url: String, uri: Uri): Boolean {
         val scheme = uri.scheme ?: return false
 
-        when (scheme.toLowerCase()) {
+        when (scheme.toLowerCase(Locale.ENGLISH)) {
             "intent" -> {
                 try {
                     val intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME)
@@ -914,7 +907,7 @@ class WebClient(
 
                             }
                             val fallbackUrl = intent.getStringExtra("browser_fallback_url")
-                            if (!TextUtils.isEmpty(fallbackUrl)) {
+                            if (!fallbackUrl.isNullOrEmpty()) {
                                 controller.loadUrl(data, fallbackUrl)
                             }
                         }
@@ -934,74 +927,74 @@ class WebClient(
                     if (action.indexOf('/') > -1) {
                         action = action.substring(0, action.indexOf('/'))
                     }
-                    when (action.toLowerCase()) {
-                        "settings", "setting" -> intent = Intent(activity, MainSettingsActivity::class.java)
-                        "histories", "history" -> {
-                            intent = Intent(activity, BrowserHistoryActivity::class.java)
-                            intent.putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, controller.isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
-                            intent.putExtra(Constants.intent.EXTRA_MODE_ORIENTATION, controller.requestedOrientationByCtrl)
-                            controller.startActivity(intent, BrowserController.REQUEST_HISTORY)
-                            return true
+                when (action.toLowerCase(Locale.ENGLISH)) {
+                    "settings", "setting" -> intent = Intent(activity, MainSettingsActivity::class.java)
+                    "histories", "history" -> {
+                        intent = Intent(activity, BrowserHistoryActivity::class.java)
+                        intent.putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, controller.isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
+                        intent.putExtra(Constants.intent.EXTRA_MODE_ORIENTATION, controller.requestedOrientationByCtrl)
+                        controller.startActivity(intent, BrowserController.REQUEST_HISTORY)
+                        return true
+                    }
+                    "downloads", "download" -> {
+                        intent = Intent(activity, DownloadListActivity::class.java).apply {
+                            putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, controller.isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
+                            putExtra(Constants.intent.EXTRA_MODE_ORIENTATION, controller.requestedOrientationByCtrl)
                         }
-                        "downloads", "download" -> {
-                            intent = Intent(activity, DownloadListActivity::class.java).apply {
-                                putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, controller.isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
-                                putExtra(Constants.intent.EXTRA_MODE_ORIENTATION, controller.requestedOrientationByCtrl)
-                            }
+                    }
+                    "debug" -> intent = Intent(activity, DebugActivity::class.java)
+                    "bookmarks", "bookmark" -> {
+                        intent = Intent(activity, BookmarkActivity::class.java).apply {
+                            putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, controller.isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
+                            putExtra(Constants.intent.EXTRA_MODE_ORIENTATION, controller.requestedOrientationByCtrl)
                         }
-                        "debug" -> intent = Intent(activity, DebugActivity::class.java)
-                        "bookmarks", "bookmark" -> {
-                            intent = Intent(activity, BookmarkActivity::class.java).apply {
-                                putExtra(Constants.intent.EXTRA_MODE_FULLSCREEN, controller.isFullscreenMode && DisplayUtils.isNeedFullScreenFlag())
-                                putExtra(Constants.intent.EXTRA_MODE_ORIENTATION, controller.requestedOrientationByCtrl)
-                            }
-                            controller.startActivity(intent, BrowserController.REQUEST_BOOKMARK)
-                            return true
+                        controller.startActivity(intent, BrowserController.REQUEST_BOOKMARK)
+                        return true
+                    }
+                    "search" -> {
+                        controller.showSearchBox("", controller.indexOf(data.id), 0, "reverse".equals(uri.fragment, ignoreCase = true))
+                        return true
+                    }
+                    "speeddial" -> return false
+                    "home" -> {
+                        if ("yuzu:home".equals(AppPrefs.home_page.get(), ignoreCase = true) || "yuzu://home".equals(AppPrefs.home_page.get(), ignoreCase = true)) {
+                            AppPrefs.home_page.set("about:blank")
+                            AppPrefs.commit(activity, AppPrefs.home_page)
                         }
-                        "search" -> {
-                            controller.showSearchBox("", controller.indexOf(data.id), false, "reverse".equals(uri.fragment, ignoreCase = true))
-                            return true
-                        }
-                        "speeddial" -> return false
-                        "home" -> {
-                            if ("yuzu:home".equals(AppPrefs.home_page.get(), ignoreCase = true) || "yuzu://home".equals(AppPrefs.home_page.get(), ignoreCase = true)) {
-                                AppPrefs.home_page.set("about:blank")
-                                AppPrefs.commit(activity, AppPrefs.home_page)
-                            }
-                            controller.loadUrl(data, AppPrefs.home_page.get())
-                            return true
-                        }
-                        "resblock" -> intent = Intent(activity, ResourceBlockListActivity::class.java)
-                        "adblock" -> intent = Intent(activity, AdBlockActivity::class.java)
-                        "readitlater" -> intent = Intent(activity, ReadItLaterActivity::class.java)
-                        "download-file" -> {
-                            val keyData = uri.schemeSpecificPart.substring(action.length + 1)
+                        controller.loadUrl(data, AppPrefs.home_page.get())
+                        return true
+                    }
+                    "resblock" -> intent = Intent(activity, ResourceBlockListActivity::class.java)
+                    "adblock" -> intent = Intent(activity, AdBlockActivity::class.java)
+                    "readitlater" -> intent = Intent(activity, ReadItLaterActivity::class.java)
+                    "download-file" -> {
+                        val keyData = uri.schemeSpecificPart.substring(action.length + 1)
 
-                            val items = keyData.split('&', limit = 3)
-                            if (items.size == 3 && items[0] == controller.secretKey) {
-                                when (items[1]) {
-                                    "0" -> onDownloadStart(data.mWebView, items[2], "", "", "", -1)
-                                    "1" -> DownloadDialog(items[2], data.mWebView.webSettings.userAgentString)//TODO referer
-                                            .show(controller.activity.supportFragmentManager, "download")
-                                    "2" -> {
-                                        val file = DownloadFile(items[2], null, DownloadRequest(null, data.mWebView.webSettings.userAgentString, null))
-                                        controller.activity.download(getDownloadFolderUri(controller.applicationContextInfo), file, null)
-                                    }
-                                    "3" -> {
-                                        val downloader = FastDownloadActivity
-                                                .intent(controller.activity,
-                                                        items[2],
-                                                        data.mWebView.url,
-                                                        data.mWebView.getUserAgent(),
-                                                        ".jpg")
-                                        controller.startActivity(downloader, BrowserController.REQUEST_SHARE_IMAGE)
-                                    }
+                        val items = keyData.split('&', limit = 3)
+                        if (items.size == 3 && items[0] == controller.secretKey) {
+                            when (items[1]) {
+                                "0" -> onDownloadStart(data.mWebView, items[2], "", "", "", -1)
+                                "1" -> DownloadDialog(items[2], data.mWebView.webSettings.userAgentString)//TODO referer
+                                    .show(controller.activity.supportFragmentManager, "download")
+                                "2" -> {
+                                    val file = DownloadFile(items[2], null, DownloadRequest(null, data.mWebView.webSettings.userAgentString, null))
+                                    controller.activity.download(getDownloadFolderUri(controller.applicationContextInfo), file, null)
+                                }
+                                "3" -> {
+                                    val downloader = FastDownloadActivity
+                                        .intent(controller.activity,
+                                            items[2],
+                                            data.mWebView.url,
+                                            data.mWebView.getUserAgent(),
+                                            ".jpg")
+                                    controller.startActivity(downloader, BrowserController.REQUEST_SHARE_IMAGE)
                                 }
                             }
-                            return true
                         }
-                        else -> return false
+                        return true
                     }
+                    else -> return false
+                }
                 activity.startActivity(intent)
                 return true
             }
@@ -1023,12 +1016,16 @@ class WebClient(
             }
             "abp" -> {
                 if (uri.host == "subscribe") {
-                    val title = uri.getQueryParameter("title")
-                    val filterUrl = uri.getQueryParameter("location")
-                    if (title != null && filterUrl != null)
-                        AbpFilterSubscribeDialog.create(title, filterUrl)
-                            .show(controller.activity.supportFragmentManager, "subscribe")
-                    return true
+                    if (subscribeAdBlockFilter(uri)) {
+                        return true
+                    }
+                }
+            }
+            "http", "https" -> {
+                if (uri.host == "subscribe.adblockplus.org" && uri.path == "/") {
+                    if (subscribeAdBlockFilter(uri)) {
+                        return true
+                    }
                 }
             }
         }
@@ -1048,7 +1045,7 @@ class WebClient(
 
                 }
                 val fallbackUrl = intent.getStringExtra("browser_fallback_url")
-                if (!TextUtils.isEmpty(fallbackUrl)) {
+                if (!fallbackUrl.isNullOrEmpty()) {
                     controller.loadUrl(data, fallbackUrl)
                 }
                 return true
@@ -1088,6 +1085,16 @@ class WebClient(
                 }
             }
         }
+    }
+
+    private fun subscribeAdBlockFilter(uri: Uri): Boolean {
+        val url = uri.getQueryParameter("location") ?: return false
+        val title = uri.getQueryParameter("title") ?: url
+
+        AbpFilterSubscribeDialog.create(title, url)
+            .show(controller.activity.supportFragmentManager, "subscribe")
+
+        return true
     }
 
     private fun checkNewTabLinkAuto(perform: Int, tab: MainTabData, url: String): Boolean {
@@ -1162,19 +1169,19 @@ class WebClient(
         }
         if (hasError(SslError.SSL_EXPIRED)) {
             builder.appendError(context.getText(R.string.ssl_error_certificate_expired))
-                    .appendErrorInfo(context.getText(R.string.ssl_error_certificate_expired_info), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.DEFAULT).format(certificate.validNotAfterDate))
+                .appendErrorInfo(context.getText(R.string.ssl_error_certificate_expired_info), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.DEFAULT).format(certificate.validNotAfterDate))
         }
         if (hasError(SslError.SSL_IDMISMATCH)) {
             builder.appendError(context.getText(R.string.ssl_error_certificate_domain_mismatch))
-                    .appendErrorInfo(context.getText(R.string.ssl_error_certificate_domain_mismatch_info), certificate.issuedTo.cName)
+                .appendErrorInfo(context.getText(R.string.ssl_error_certificate_domain_mismatch_info), certificate.issuedTo.cName)
         }
         if (hasError(SslError.SSL_NOTYETVALID)) {
             builder.appendError(context.getText(R.string.ssl_error_certificate_not_yet_valid))
-                    .appendErrorInfo(context.getText(R.string.ssl_error_certificate_not_yet_valid_info), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.DEFAULT).format(certificate.validNotBeforeDate))
+                .appendErrorInfo(context.getText(R.string.ssl_error_certificate_not_yet_valid_info), DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.DEFAULT).format(certificate.validNotBeforeDate))
         }
         if (hasError(SslError.SSL_UNTRUSTED)) {
             builder.appendError(context.getText(R.string.ssl_error_certificate_untrusted))
-                    .appendErrorInfo(context.getText(R.string.ssl_error_certificate_untrusted_info), certificate.issuedBy.dName)
+                .appendErrorInfo(context.getText(R.string.ssl_error_certificate_untrusted_info), certificate.issuedBy.dName)
         }
         if (hasError(SslError.SSL_INVALID)) {
             builder.appendError(context.getText(R.string.ssl_error_certificate_invalid))

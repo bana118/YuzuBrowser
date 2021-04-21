@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,8 +18,13 @@ package jp.hazuki.yuzubrowser.download.core.data
 
 import android.annotation.SuppressLint
 import android.os.Parcelable
-import kotlinx.android.parcel.Parcelize
+import kotlinx.parcelize.Parcelize
 
 @SuppressLint("ParcelCreator")
 @Parcelize
-class DownloadRequest(val referrer: String?, val userAgent: String?, val defaultExt: String?) : Parcelable
+class DownloadRequest(
+    val referrer: String?,
+    val userAgent: String?,
+    val defaultExt: String?,
+    var isScopedStorageMode: Boolean = false
+) : Parcelable

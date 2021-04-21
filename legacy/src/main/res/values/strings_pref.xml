@@ -16,7 +16,7 @@
   -->
 
 <resources>
-    <string name="copyright" translatable="false">©2017-2019 Hazuki</string>
+    <string name="copyright" translatable="false">©2017-2021 Hazuki</string>
 
     <integer-array name="pref_tab_type_values">
         <item>0</item>
@@ -317,18 +317,6 @@
         <item>4</item>
     </integer-array>
 
-    <string-array name="pref_file_access_list">
-        <item>Disable (safest)</item>
-        <item>Enable in sandbox (safer)</item>
-        <item>Enable (unsafe)</item>
-    </string-array>
-
-    <integer-array name="pref_file_access_values">
-        <item>0</item>
-        <item>1</item>
-        <item>2</item>
-    </integer-array>
-
     <integer-array name="pref_mixed_contents_values">
         <item>1</item>
         <item>2</item>
@@ -410,5 +398,31 @@
     <integer-array name="pref_speeddial_layout_values">
         <item>0</item>
         <item>1</item>
+    </integer-array>
+
+    <string-array name="pref_web_theme_entries">
+        <item>@string/pref_light_theme</item>
+        <item>@string/pref_dark_theme</item>
+        <item>@string/pref_force_web_dark_mode</item>
+        <item>@string/pref_force_dark_mode</item>
+    </string-array>
+
+    <integer-array name="pref_web_theme_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </integer-array>
+
+    <string-array name="pref_navigation_bar_entries">
+        <item>@string/pref_same_as_toolbar</item>
+        <item>@string/pref_same_as_status_bar</item>
+        <item>@string/black</item>
+    </string-array>
+
+    <integer-array name="pref_navigation_bar_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
     </integer-array>
 </resources>

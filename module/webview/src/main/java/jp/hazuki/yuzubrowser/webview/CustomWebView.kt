@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,6 +90,10 @@ interface CustomWebView {
     val isInvertMode: Boolean
         get() = renderingMode == RENDERING_INVERT || renderingMode == RENDERING_INVERT_GRAY
 
+    var isBlock: Boolean
+
+    val canPullToRefresh: Boolean
+
     fun canGoBack(): Boolean
 
     fun canGoBackOrForward(steps: Int): Boolean
@@ -110,7 +114,7 @@ interface CustomWebView {
 
     fun findAllAsync(find: String)
 
-    fun setFindListener(listener: WebView.FindListener)
+    fun setFindListener(listener: WebView.FindListener?)
 
     fun findNext(forward: Boolean)
 
@@ -125,11 +129,11 @@ interface CustomWebView {
 
     fun goForward()
 
-    fun loadUrl(url: String?)
+    fun loadUrl(url: String)
 
-    fun loadUrl(url: String?, additionalHttpHeaders: MutableMap<String, String>?)
+    fun loadUrl(url: String, additionalHttpHeaders: MutableMap<String, String>)
 
-    fun evaluateJavascript(js: String?, callback: ValueCallback<String>?)
+    fun evaluateJavascript(js: String, callback: ValueCallback<String>?)
 
     fun onPause()
 
@@ -145,7 +149,7 @@ interface CustomWebView {
 
     fun requestWebFocus(): Boolean
 
-    fun requestFocusNodeHref(hrefMsg: Message)
+    fun requestFocusNodeHref(hrefMsg: Message?)
 
     fun requestImageRef(msg: Message)
 
@@ -166,7 +170,7 @@ interface CustomWebView {
 
     fun setMyWebChromeClient(client: CustomWebChromeClient?)
 
-    fun setMyWebViewClient(client: CustomWebViewClient?)
+    fun setMyWebViewClient(client: CustomWebViewClient)
 
     fun stopLoading()
 
@@ -206,10 +210,10 @@ interface CustomWebView {
 
     fun computeHorizontalScrollExtentMethod(): Int
 
-    fun createPrintDocumentAdapter(documentName: String?): PrintDocumentAdapter?
+    fun createPrintDocumentAdapter(documentName: String): PrintDocumentAdapter
 
-    fun loadDataWithBaseURL(baseUrl: String, data: String,
-                            mimeType: String, encoding: String, historyUrl: String)
+    fun loadDataWithBaseURL(baseUrl: String?, data: String,
+                            mimeType: String?, encoding: String?, historyUrl: String?)
 
     fun setWebViewTheme(theme: WebViewTheme?)
 
@@ -223,9 +227,9 @@ interface CustomWebView {
 
     fun setVerticalScrollBarEnabled(enabled: Boolean)
 
-    fun setSwipeable(swipeable: Boolean)
-
     fun setScrollableHeight(listener: (() -> Int)?)
+
+    fun onPageDocumentStart()
 
     data class WebViewTheme(val progressColor: Int, val backGroundColor: Int)
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,14 +18,16 @@ package jp.hazuki.yuzubrowser.legacy.useragent
 
 import android.content.Intent
 import android.os.Bundle
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.ui.app.ThemeActivity
 
+@AndroidEntryPoint
 class UserAgentListActivity : ThemeActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         UserAgentListDialog
-                .newInstance(intent.getStringExtra(Intent.EXTRA_TEXT))
-                .show(supportFragmentManager, "ua")
+            .newInstance(intent.getStringExtra(Intent.EXTRA_TEXT)!!)
+            .show(supportFragmentManager, "ua")
     }
 }

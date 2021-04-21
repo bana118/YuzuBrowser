@@ -41,7 +41,13 @@
 
         <meta-data
             android:name="android.webkit.WebView.EnableSafeBrowsing"
-            android:value="true"/>
+            android:value="true" />
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="${crashlyticsCollectionEnabled}" />
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
 
         <activity
             android:name="jp.hazuki.yuzubrowser.browser.BrowserActivity"
@@ -161,17 +167,9 @@
             android:name="jp.hazuki.yuzubrowser.legacy.debug.DebugActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:exported="true" />
-        <activity
-            android:name="jp.hazuki.yuzubrowser.legacy.debug.DebugFileListActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize" />
-        <activity
-            android:name="jp.hazuki.yuzubrowser.legacy.debug.TextEditActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize" />
+        <activity android:name="jp.hazuki.yuzubrowser.legacy.debug.DebugFileListActivity" />
         <activity
             android:name="jp.hazuki.yuzubrowser.legacy.debug.ActivityListActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize" />
-        <activity
-            android:name="jp.hazuki.yuzubrowser.legacy.debug.EnvironmentActivity"
             android:configChanges="keyboardHidden|orientation|screenSize" />
         <activity
             android:name="jp.hazuki.yuzubrowser.legacy.action.view.ActionStringActivity"
@@ -198,13 +196,6 @@
             android:name="jp.hazuki.yuzubrowser.download.ui.DownloadListActivity"
             android:label="@string/download"/>
 
-        <provider
-            android:name=".provider.SafeFileProvider"
-            android:authorities="${applicationId}.browser.SafeFileProvider"
-            android:exported="false"
-            android:permission="${applicationId}.permission.myapp.signature"
-            android:readPermission="jp.hazuki.yuzubrowser.permission.myapp.signature"
-            android:writePermission="jp.hazuki.yuzubrowser.permission.myapp.signature" />
         <provider
             android:name="jp.hazuki.yuzubrowser.provider.DownloadFileProvider"
             android:authorities="${applicationId}.downloadFileProvider"
@@ -256,18 +247,10 @@
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:label="@string/userjs_edit" />
         <activity
-            android:name="jp.hazuki.yuzubrowser.legacy.utils.view.filelist.FileListActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize" />
-        <activity
             android:name="jp.hazuki.yuzubrowser.legacy.resblock.ResourceBlockListActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:label="@string/pref_resblock_manage" />
-        <activity
-            android:name="jp.hazuki.yuzubrowser.legacy.action.view.SoftButtonActionArrayActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize" />
-        <activity
-            android:name="jp.hazuki.yuzubrowser.legacy.action.view.SoftButtonActionActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize" />
+        <activity android:name=".legacy.action.view.SoftButtonActionActivity" />
         <activity
             android:name="jp.hazuki.yuzubrowser.legacy.useragent.UserAgentSettingActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
@@ -323,10 +306,6 @@
         <activity
             android:name="jp.hazuki.yuzubrowser.legacy.webrtc.ui.WebPermissionActivity"
             android:label="@string/pref_content_settings"/>
-        <activity
-            android:name="jp.hazuki.yuzubrowser.download.ui.FallbackFolderSelectActivity"
-            android:label="@string/pref_download_folder"
-            android:theme="@style/BrowserThemeDayNight.Transparent"/>
     </application>
 
 </manifest>

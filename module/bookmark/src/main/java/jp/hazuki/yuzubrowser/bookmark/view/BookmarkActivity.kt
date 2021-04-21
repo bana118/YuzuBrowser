@@ -17,17 +17,21 @@
 package jp.hazuki.yuzubrowser.bookmark.view
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.MenuItem
+import android.view.WindowInsets
 import android.view.WindowManager
-import androidx.fragment.app.transaction
+import androidx.fragment.app.commit
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.bookmark.R
 import jp.hazuki.yuzubrowser.ui.INTENT_EXTRA_MODE_FULLSCREEN
 import jp.hazuki.yuzubrowser.ui.INTENT_EXTRA_MODE_ORIENTATION
-import jp.hazuki.yuzubrowser.ui.app.DaggerLongPressFixActivity
+import jp.hazuki.yuzubrowser.ui.app.LongPressFixActivity
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
 
-class BookmarkActivity : DaggerLongPressFixActivity() {
+@AndroidEntryPoint
+class BookmarkActivity : LongPressFixActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,11 +50,17 @@ class BookmarkActivity : DaggerLongPressFixActivity() {
             orientation = intent.getIntExtra(INTENT_EXTRA_MODE_ORIENTATION, orientation)
         }
 
-        if (fullscreen)
-            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+        if (fullscreen) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                window.insetsController?.hide(WindowInsets.Type.statusBars())
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            }
+        }
         requestedOrientation = orientation
 
-        supportFragmentManager.transaction {
+        supportFragmentManager.commit {
             replace(R.id.container, BookmarkFragment(pickMode, itemId))
         }
     }

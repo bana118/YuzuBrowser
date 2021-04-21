@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package jp.hazuki.yuzubrowser.webview
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.util.AttributeSet
 import android.view.MotionEvent
@@ -27,13 +28,17 @@ import androidx.core.view.ViewCompat
 import jp.hazuki.yuzubrowser.core.utility.common.listener.OnTouchEventListener
 import jp.hazuki.yuzubrowser.webview.listener.OnScrollChangedListener
 import jp.hazuki.yuzubrowser.webview.listener.OnScrollableChangeListener
+import kotlin.math.abs
 
-internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null, defStyle: Int = android.R.attr.webViewStyle, id: Long = -1) : JvmWebViewBridge(context, attrs, defStyle) {
+internal class NormalWebView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null,
+    defStyle: Int = android.R.attr.webViewStyle, id: Long = -1
+) : JvmWebViewBridge(context, attrs, defStyle), WebViewCallback.OnWebViewListener {
 
     private var titleBar: View? = null
     private var nestedOffsetY = 0
     private var doubleTapFling = false
-    private var isSwipeable = true
     private var firstY = 0
     private var lastY = 0
     private var downScrollY = 0
@@ -42,6 +47,9 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
     private var scrollExcessPlay = false
     private var nestedScrolled = false
     private var firstScroll = true
+    override var swipeEnable = false
+    private val webViewCallback = WebViewCallback(this)
+    private var customWebViewClient: CustomWebViewClient? = null
     override val webSettings = YuzuWebSettings(settings)
     override var theme: CustomWebView.WebViewTheme? = null
         private set
@@ -56,6 +64,7 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
 
     init {
         isNestedScrollingEnabled = true
+        addJavascriptInterface(webViewCallback, WebViewCallback.INTERFACE_KEY)
     }
 
     override val isBackForwardListEmpty: Boolean
@@ -84,13 +93,20 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
     override var isToolbarShowing: Boolean = false
     override var renderingMode = 0
 
+    override var isBlock = false
+    private var isOverScrolling = false
+
+    override val canPullToRefresh: Boolean
+        get() = swipeEnable && isOverScrolling
+
     override fun copyMyBackForwardList(): CustomWebBackForwardList = CustomWebBackForwardList(copyBackForwardList())
 
     override fun setMyWebChromeClient(client: CustomWebChromeClient?) {
         webChromeClient = client
     }
 
-    override fun setMyWebViewClient(client: CustomWebViewClient?) {
+    override fun setMyWebViewClient(client: CustomWebViewClient) {
+        customWebViewClient = client
         webViewClient = client
     }
 
@@ -119,6 +135,7 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
                 if (view.parent != null) {
                     (view.parent as ViewGroup).removeView(view)
                 }
+                @Suppress("DEPRECATION")
                 addView(view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT, 0, 0))
                 view.translationX = scrollX.toFloat()//can move X
             }
@@ -164,6 +181,12 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
         scrollTo(x + scrollX, y + scrollY)
     }
 
+    override fun onOverScrolled(scrollX: Int, scrollY: Int, clampedX: Boolean, clampedY: Boolean) {
+        super.onOverScrolled(scrollX, scrollY, clampedX, clampedY)
+        isOverScrolling = scrollY <= 0
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(ev: MotionEvent?): Boolean {
         val touchDetector = touchDetector
         if (touchDetector != null && ev != null && touchDetector.onTouchEvent(ev)) {
@@ -191,7 +214,7 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
         when (action) {
             MotionEvent.ACTION_MOVE -> if (event.pointerCount != 1) {
                 returnValue = super.onTouchEvent(event)
-            } else if (scrollExcessPlay && Math.abs(firstY - eventY) < scrollSlop || downScrollY != 0 && downScrollY == scrollY) {
+            } else if (scrollExcessPlay && abs(firstY - eventY) < scrollSlop || downScrollY != 0 && downScrollY == scrollY) {
                 returnValue = super.onTouchEvent(ev)
                 lastY = eventY
             } else {
@@ -202,17 +225,12 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
                     startNestedScroll(ViewCompat.SCROLL_AXIS_VERTICAL)
                 }
 
-                if (scrollY > scrollSlop) {
-                    setSwipeable(false)
-                }
-
                 // NestedPreScroll
                 if (dispatchNestedPreScroll(0, deltaY, mScrollConsumed, mScrollOffset)) {
                     deltaY -= mScrollConsumed[1]
                     lastY = eventY - mScrollOffset[1]
                     event.offsetLocation(0f, (-mScrollOffset[1]).toFloat())
                     nestedOffsetY = mScrollOffset[1]
-                    setSwipeable(false)
                 }
                 returnValue = super.onTouchEvent(event)
 
@@ -222,7 +240,6 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
                     nestedOffsetY = mScrollOffset[1]
                     lastY -= deltaY
                     nestedScrolled = true
-                    setSwipeable(false)
                 } else {
                     nestedScrolled = false
                 }
@@ -238,19 +255,15 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
                 }
                 firstY = eventY
                 downScrollY = scrollY
-                if (downScrollY < scrollSlop && isToolbarShowing) {
-                    setSwipeable(true)
-                }
             }
-            else -> {
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 isTouching = false
+                isOverScrolling = false
                 returnValue = super.onTouchEvent(ev)
                 // end NestedScroll
                 stopNestedScroll()
-                if (scrollY < scrollSlop && isToolbarShowing) {
-                    setSwipeable(true)
-                }
             }
+            else -> returnValue = super.onTouchEvent(ev)
         }
         return returnValue
     }
@@ -260,7 +273,6 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
         setEmbeddedTitleBarMethod(null)
         setWebViewTouchDetector(null)
         setMyWebChromeClient(null)
-        setMyWebViewClient(null)
         setOnMyCreateContextMenuListener(null)
         setMyOnScrollChangedListener(null)
 
@@ -294,24 +306,13 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
     override fun dispatchNestedPreFling(velocityX: Float, velocityY: Float): Boolean =
             childHelper.dispatchNestedPreFling(velocityX, velocityY)
 
-    override fun setSwipeable(swipeable: Boolean) {
-        if (isSwipeable != swipeable) {
-            isSwipeable = swipeable
-            scrollableChangeListener?.onScrollableChanged(isScrollable && isSwipeable)
-        }
-    }
-
-    fun isSwipeable(): Boolean {
-        return isSwipeable
-    }
-
     override fun computeVerticalScrollRange(): Int {
         val scrollRange = super.computeVerticalScrollRange()
         verticalScrollRange = scrollRange
         val old = isScrollable
         isScrollable = scrollRange > height + scrollSlop + (scrollableHeight?.invoke() ?: 0)
         if (old != isScrollable) {
-            scrollableChangeListener?.onScrollableChanged(isScrollable && isSwipeable)
+            scrollableChangeListener?.onScrollableChanged(isScrollable)
         }
 
         if (isScrollable && !isNestedScrollingEnabled) {
@@ -323,5 +324,13 @@ internal class NormalWebView @JvmOverloads constructor(context: Context, attrs: 
 
     override fun setScrollableHeight(listener: (() -> Int)?) {
         scrollableHeight = listener
+    }
+
+    override fun onPageDocumentStart() {
+        evaluateJavascript(webViewCallback.createInjectScript(), null)
+    }
+
+    override fun onDomContentLoaded() {
+        customWebViewClient?.onDomContentLoaded(this)
     }
 }

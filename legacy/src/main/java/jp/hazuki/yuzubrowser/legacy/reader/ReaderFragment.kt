@@ -17,16 +17,19 @@
 package jp.hazuki.yuzubrowser.legacy.reader
 
 import android.graphics.Typeface
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.Spanned
-import android.text.TextUtils
 import android.text.style.ImageSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
-import dagger.android.support.DaggerFragment
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.Fragment
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.core.utility.extensions.convertDpToPx
 import jp.hazuki.yuzubrowser.core.utility.extensions.isInstanceOf
 import jp.hazuki.yuzubrowser.core.utility.utils.ui
@@ -34,13 +37,15 @@ import jp.hazuki.yuzubrowser.legacy.R
 import jp.hazuki.yuzubrowser.ui.dialog.ProgressDialog
 import jp.hazuki.yuzubrowser.ui.extensions.decodePunyCodeUrlHost
 import jp.hazuki.yuzubrowser.ui.settings.AppPrefs
+import jp.hazuki.yuzubrowser.ui.utils.checkStoragePermission
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import java.io.File
 import javax.inject.Inject
 
-class ReaderFragment : DaggerFragment() {
+@AndroidEntryPoint
+class ReaderFragment : Fragment() {
 
     private lateinit var titleTextView: TextView
     private lateinit var bodyTextView: TextView
@@ -62,17 +67,32 @@ class ReaderFragment : DaggerFragment() {
         bodyTextView.textSize = AppPrefs.reader_text_size.get().toFloat()
 
         val fontPath = AppPrefs.reader_text_font.get()
-        if (!TextUtils.isEmpty(fontPath)) {
-            val font = File(fontPath)
-
-            if (font.exists() && font.isFile) {
-                try {
-                    bodyTextView.typeface = Typeface.createFromFile(fontPath)
-                } catch (e: RuntimeException) {
-                    Toast.makeText(activity, R.string.font_error, Toast.LENGTH_SHORT).show()
+        if (fontPath.isNotEmpty()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && fontPath.startsWith("content")) {
+                val fd = requireContext().contentResolver.openFileDescriptor(Uri.parse(fontPath), "r")
+                if (fd != null) {
+                    bodyTextView.typeface = Typeface.Builder(fd.fileDescriptor).build()
+                } else {
+                    Toast.makeText(activity, R.string.font_not_found, Toast.LENGTH_SHORT).show()
                 }
             } else {
-                Toast.makeText(activity, R.string.font_not_found, Toast.LENGTH_SHORT).show()
+                if (!activity.checkStoragePermission()) {
+                    Toast.makeText(activity, R.string.font_not_found, Toast.LENGTH_SHORT).show()
+                    return
+                }
+                val isPath = fontPath.startsWith('/')
+                val path = if (isPath) fontPath else Uri.parse(fontPath).path!!
+                val font = File(path)
+                if (font.exists() && font.isFile) {
+                    try {
+                        bodyTextView.typeface = Typeface.createFromFile(fontPath)
+                    } catch (e: RuntimeException) {
+                        Toast.makeText(activity, R.string.font_error, Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(activity, R.string.font_not_found, Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -92,10 +112,10 @@ class ReaderFragment : DaggerFragment() {
 
         activity.title = url.decodePunyCodeUrlHost()
 
-        fragmentManager?.findFragmentByTag("loading").isInstanceOf<androidx.fragment.app.DialogFragment> {
+        parentFragmentManager.findFragmentByTag("loading").isInstanceOf<DialogFragment> {
             it.dismiss()
         }
-        val dialog = ProgressDialog(activity.getString(R.string.now_loading), true, false).also {
+        val dialog = ProgressDialog(activity.getString(R.string.now_loading), cancelable = true, cancelOnTouchOutside = false).also {
             it.show(childFragmentManager, "loading")
         }
 

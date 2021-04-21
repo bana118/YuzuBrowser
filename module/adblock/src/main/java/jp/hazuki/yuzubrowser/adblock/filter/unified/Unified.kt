@@ -17,7 +17,6 @@
 package jp.hazuki.yuzubrowser.adblock.filter.unified
 
 import android.content.Context
-import com.google.re2j.Pattern
 import com.google.re2j.PatternSyntaxException
 import jp.hazuki.yuzubrowser.adblock.filter.*
 import jp.hazuki.yuzubrowser.adblock.filter.unified.io.FilterWriter
@@ -40,11 +39,11 @@ internal const val FILTER_TYPE_PATTERN = 11
 
 internal const val FILTER_DIR = "adblock_filter"
 internal const val FILTER_CACHE_HEADER = "YZBABPFI\u0000\u0001\u0001"
-internal const val ELEMENT_FILTER_CACHE_HEADER = "YZBABPEF\u0000\u0001\u0000"
+internal const val ELEMENT_FILTER_CACHE_HEADER = "YZBABPEF\u0000\u0001\u0001"
 
 fun createRegexFilter(filter: String, contentType: Int, ignoreCase: Boolean, domains: DomainMap?, thirdParty: Int): UnifiedFilter? {
     try {
-        Re2Filter(Pattern.compile(filter, if (ignoreCase) Pattern.CASE_INSENSITIVE else 0), filter, contentType, ignoreCase, domains, thirdParty)
+        Re2Filter(filter, contentType, ignoreCase, domains, thirdParty)
     } catch (e: PatternSyntaxException) {
         try {
             RegexFilter(filter, contentType, ignoreCase, domains, thirdParty)

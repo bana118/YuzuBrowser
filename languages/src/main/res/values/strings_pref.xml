@@ -177,13 +177,6 @@
     <string name="pref_lpress_others">Others</string>
     <string name="pref_clear_data_at_finish">Clear data at finish</string>
     <string name="pref_security_settings">Security settings</string>
-    <string name="pref_file_access">Local file access settings</string>
-
-    <string-array name="pref_file_access_list">
-        <item>Disable (safest)</item>
-        <item>Enable in sandbox (safer)</item>
-        <item>Enable (unsafe)</item>
-    </string-array>
 
     <string name="pref_mixed_content">Insecure content settings on https</string>
 
@@ -326,6 +319,16 @@
     <string name="pref_number_of_tab_to_cache">Number of tabs to cache</string>
     <string name="pref_dark_theme">Dark theme</string>
     <string name="pref_light_theme">Light theme</string>
+    <string name="pref_web_theme_mode">Web theme</string>
+    <string name="pref_navigation_bar_color">Navigation bar color</string>
+    <string name="pref_same_as_toolbar">Same color as the toolbar</string>
+    <string name="pref_same_as_status_bar">Same color as the status bar</string>
+    <string name="black">Black</string>
+
+    <string name="pref_force_dark_mode">Force dark mode</string>
+    <string name="pref_force_web_dark_mode">Prefer web theme over force dark mode</string>
+    <string name="pref_dark_mode">Dark mode</string>
+    <string name="pref_light_mode">Light mode</string>
 
     <string-array name="pref_rendering_list">
         <item>Normal</item>
@@ -355,9 +358,9 @@
 
     <string name="pref_ad_block">Ad block settings</string>
     <string name="pref_ad_block_enable">Enable ad block</string>
-    <string name="pref_ad_block_black">Black list</string>
-    <string name="pref_ad_block_white">White list</string>
-    <string name="pref_ad_block_white_page">White page list</string>
+    <string name="pref_ad_block_black">Deny list</string>
+    <string name="pref_ad_block_white">Allow list</string>
+    <string name="pref_ad_block_white_page">Allow page list</string>
     <string name="exclude_comment">Exclude comment lines</string>
     <string name="pref_edit">Edit</string>
     <string name="pref_delete">Delete</string>
@@ -452,7 +455,6 @@
     <string name="pref_privacy_policy">Privacy Policy</string>
     <string name="mining_protect">No Coin</string>
     <string name="mining_protect_summary">Cryptocurrency mining protection</string>
-    <string name="pref_storage_location_warn">This storage location may not work properly with other apps.</string>
     <string name="pref_fake_chrome">Disguised as Chrome</string>
     <string name="pref_fake_chrome_summary">Impersonate default UserAgent as Chrome</string>
     <string name="pref_toolbar_small_icon">Show long pressed icon</string>
@@ -467,4 +469,8 @@
     <string name="pref_bookmark_overflow">Item options menu settings</string>
     <string name="pref_page_background_white">Make the browser background white</string>
     <string name="pref_page_background_white_info">If you have flickers when open a new tab or switching between tabs, disable it.</string>
+    <string name="pref_abp_update_wifi_only">Auto-update filters over Wi-Fi only</string>
+    <string name="pref_ad_block_disable_cosmetic_filtering">Disable cosmetic filtering</string>
+    <string name="pref_send_usage">Send usage statistics</string>
+    <string name="pref_send_usage_summary">Disable to stop sending anonymous usage data and crash reports</string>
 </resources>

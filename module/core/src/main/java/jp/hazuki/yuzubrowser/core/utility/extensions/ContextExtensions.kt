@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,16 +31,12 @@ import androidx.annotation.ColorInt
 import androidx.annotation.ColorRes
 import androidx.annotation.DimenRes
 import androidx.core.content.ContextCompat
+import jp.hazuki.yuzubrowser.core.USER_AGENT_PC
 import java.io.File
 
 @ColorInt
 fun Context.getResColor(@ColorRes id: Int): Int {
-    return if (Build.VERSION.SDK_INT >= 23) {
-        resources.getColor(id, theme)
-    } else {
-        @Suppress("DEPRECATION")
-        resources.getColor(id)
-    }
+    return resources.getColor(id, theme)
 }
 
 fun Context.getThemeResId(@AttrRes id: Int): Int {
@@ -60,7 +56,7 @@ var Context.clipboardText: String
     set(text) {
         val clipData = ClipData("text_data", arrayOf(ClipDescription.MIMETYPE_TEXT_PLAIN), ClipData.Item(text))
         val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        manager.primaryClip = clipData
+        manager.setPrimaryClip(clipData)
     }
 
 fun Context.convertDpToPx(dp: Int): Int = (resources.displayMetrics.density * dp + 0.5f).toInt()
@@ -70,12 +66,43 @@ fun Context.convertDpToFloatPx(dp: Int): Float = resources.displayMetrics.densit
 val Context.density: Float
     get() = resources.displayMetrics.density
 
+fun Context.getRealUserAgent(ua: String?, isFakeChrome: Boolean): String? {
+    return when {
+        ua == USER_AGENT_PC -> {
+            if (isFakeChrome) {
+                getChromePcUserAgent()
+            } else {
+                getPcUserAgent()
+            }
+        }
+        ua.isNullOrEmpty() -> {
+            if (isFakeChrome) {
+                getFakeChromeUserAgent()
+            } else {
+                null
+            }
+        }
+        else -> ua
+    }
+}
+
 fun Context.getFakeChromeUserAgent(): String {
     val ua = StringBuilder(WebSettings.getDefaultUserAgent(this))
     ua.replace("; wv", "")
     ua.replace("Version/4.0 ", "")
     return ua.toString()
 }
+
+fun Context.getPcUserAgent(): String {
+    val ua = WebSettings.getDefaultUserAgent(this)
+    return ua.convertToPc()
+}
+
+fun Context.getChromePcUserAgent(): String {
+    return getFakeChromeUserAgent().convertToPc()
+}
+
+private fun String.convertToPc() = replace(Regex("\\(Linux[^()]+\\)"), "(Windows NT 10.0; Win64; x64)")
 
 fun Context.readAssetsText(fileName: String): String {
     return assets.open(fileName).reader().use { it.readText() }
@@ -86,13 +113,13 @@ fun Context.getVersionName(): String {
     return info.versionName
 }
 
-fun Context.getVersionCode(): Int {
+fun Context.getVersionCode(): Long {
     val info = packageManager.getPackageInfo(packageName, 0)
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        info.longVersionCode.toInt()
+        info.longVersionCode
     } else {
         @Suppress("DEPRECATION")
-        info.versionCode
+        info.versionCode.toLong()
     }
 }
 

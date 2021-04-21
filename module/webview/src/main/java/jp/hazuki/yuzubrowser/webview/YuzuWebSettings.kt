@@ -16,9 +16,13 @@
 
 package jp.hazuki.yuzubrowser.webview
 
+import android.annotation.SuppressLint
 import android.os.Build
 import android.webkit.WebSettings
 import androidx.annotation.RequiresApi
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
+import jp.hazuki.yuzubrowser.webview.utility.trimForHttpHeader
 
 class YuzuWebSettings(private val origin: WebSettings) {
 
@@ -236,7 +240,7 @@ class YuzuWebSettings(private val origin: WebSettings) {
     var userAgentString: String?
         get() = origin.userAgentString
         set(ua) {
-            origin.userAgentString = ua
+            origin.userAgentString = trimForHttpHeader(ua)
         }
 
     var cacheMode: Int
@@ -252,9 +256,7 @@ class YuzuWebSettings(private val origin: WebSettings) {
         }
 
     var offscreenPreRaster: Boolean
-        @RequiresApi(api = Build.VERSION_CODES.M)
         get() = origin.offscreenPreRaster
-        @RequiresApi(api = Build.VERSION_CODES.M)
         set(enabled) {
             origin.offscreenPreRaster = enabled
         }
@@ -281,6 +283,14 @@ class YuzuWebSettings(private val origin: WebSettings) {
             origin.setSupportZoom(true)
             origin.builtInZoomControls = true
             origin.displayZoomControls = show
+        }
+
+    var webTheme: Int = 0
+        set(value) {
+            if (value !in 0..4) throw IllegalArgumentException("webTheme")
+            field = value
+
+            setWebTheme()
         }
 
     fun setSupportZoom(support: Boolean) {
@@ -323,5 +333,32 @@ class YuzuWebSettings(private val origin: WebSettings) {
 
     fun setNeedInitialFocus(flag: Boolean) {
         origin.setNeedInitialFocus(flag)
+    }
+
+    @SuppressLint("RequiresFeature")
+    private fun setWebTheme() {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK) &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK_STRATEGY)) {
+
+            if (webTheme == WEB_THEME_LIGHT) {
+                WebSettingsCompat.setForceDark(origin, WebSettingsCompat.FORCE_DARK_OFF)
+            } else {
+                WebSettingsCompat.setForceDark(origin, WebSettingsCompat.FORCE_DARK_ON)
+                val strategy = when (webTheme) {
+                    WEB_THEME_DARK -> WebSettingsCompat.DARK_STRATEGY_WEB_THEME_DARKENING_ONLY
+                    WEB_THEME_PREFER_WEB_OVER_FORCE_DARK -> WebSettingsCompat.DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING
+                    WEB_THEME_FORCE_DARK -> WebSettingsCompat.DARK_STRATEGY_USER_AGENT_DARKENING_ONLY
+                    else -> throw IllegalStateException()
+                }
+                WebSettingsCompat.setForceDarkStrategy(origin, strategy)
+            }
+        }
+    }
+
+    companion object {
+        const val WEB_THEME_LIGHT = 0
+        const val WEB_THEME_DARK = 1
+        const val WEB_THEME_PREFER_WEB_OVER_FORCE_DARK = 2
+        const val WEB_THEME_FORCE_DARK = 3
     }
 }

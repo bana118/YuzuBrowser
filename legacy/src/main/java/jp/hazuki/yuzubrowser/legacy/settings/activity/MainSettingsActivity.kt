@@ -18,15 +18,19 @@ package jp.hazuki.yuzubrowser.legacy.settings.activity
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceScreen
+import dagger.hilt.android.AndroidEntryPoint
+import jp.hazuki.yuzubrowser.core.utility.extensions.getResColor
 import jp.hazuki.yuzubrowser.legacy.R
 import jp.hazuki.yuzubrowser.legacy.debug.DebugActivity
 import jp.hazuki.yuzubrowser.ui.app.ThemeActivity
 
+@AndroidEntryPoint
 class MainSettingsActivity : ThemeActivity(), PreferenceFragmentCompat.OnPreferenceStartScreenCallback, ReplaceFragmentListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,8 +51,8 @@ class MainSettingsActivity : ThemeActivity(), PreferenceFragmentCompat.OnPrefere
 
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
-                    .replace(R.id.container, MainSettingsFragment())
-                    .commit()
+                .replace(R.id.container, MainSettingsFragment())
+                .commit()
         }
     }
 
@@ -56,7 +60,10 @@ class MainSettingsActivity : ThemeActivity(), PreferenceFragmentCompat.OnPrefere
      * Set up the [android.app.ActionBar], if the API is available.
      */
     private fun setupActionBar() {
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        supportActionBar?.apply {
+            setDisplayHomeAsUpEnabled(true)
+            setBackgroundDrawable(ColorDrawable(getResColor(R.color.primary)))
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -87,8 +94,8 @@ class MainSettingsActivity : ThemeActivity(), PreferenceFragmentCompat.OnPrefere
 
     override fun replaceFragment(fragment: androidx.fragment.app.Fragment, key: String) {
         supportFragmentManager.beginTransaction()
-                .replace(R.id.container, fragment)
-                .addToBackStack(key)
-                .commit()
+            .replace(R.id.container, fragment)
+            .addToBackStack(key)
+            .commit()
     }
 }

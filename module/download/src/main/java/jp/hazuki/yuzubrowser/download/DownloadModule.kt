@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,21 +16,23 @@
 
 package jp.hazuki.yuzubrowser.download
 
+import android.content.Context
 import dagger.Module
-import dagger.android.ContributesAndroidInjector
-import jp.hazuki.yuzubrowser.download.service.DownloadService
-import jp.hazuki.yuzubrowser.download.ui.DownloadListActivity
-import jp.hazuki.yuzubrowser.download.ui.FastDownloadActivity
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import jp.hazuki.yuzubrowser.download.repository.DownloadsDao
+import jp.hazuki.yuzubrowser.download.repository.DownloadsDatabase
+import javax.inject.Singleton
 
 @Module
-abstract class DownloadModule {
+@InstallIn(SingletonComponent::class)
+class DownloadModule {
 
-    @ContributesAndroidInjector
-    abstract fun contributeDownloadService(): DownloadService
-
-    @ContributesAndroidInjector
-    abstract fun contributeFastDownloadActivity(): FastDownloadActivity
-
-    @ContributesAndroidInjector
-    abstract fun contributeDownloadListActivity(): DownloadListActivity
+    @Singleton
+    @Provides
+    fun provideDownloadsDao(@ApplicationContext context: Context): DownloadsDao {
+        return DownloadsDatabase.createInstance(context).downloadsDao()
+    }
 }

@@ -29,7 +29,6 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.NinePatchDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.graphics.drawable.shapes.RectShape;
-import android.os.Build;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.Toast;
@@ -49,8 +48,6 @@ import jp.hazuki.yuzubrowser.core.utility.extensions.ContextExtensionsKt;
 import jp.hazuki.yuzubrowser.core.utility.utils.ImageUtils;
 import jp.hazuki.yuzubrowser.ui.R;
 import okio.Okio;
-
-import static jp.hazuki.yuzubrowser.core.utility.utils.FileUtilsKt.getExternalUserDirectory;
 
 public class ThemeData {
     public static final String THEME_LIGHT = "theme://internal/light";
@@ -395,7 +392,7 @@ public class ThemeData {
             sInstance = createLightTheme(context);
             loadedTheme = folder;
         } else {
-            File file = new File(getExternalUserDirectory(), "theme" + File.separator + folder);
+            File file = new File(context.getExternalFilesDir("theme"), folder);
             if (!file.exists() || !file.isDirectory()) {
                 sInstance = null;
                 loadedTheme = null;
@@ -436,8 +433,12 @@ public class ThemeData {
         }
     }
 
+    public static boolean isUseLightStatusBar() {
+        return sInstance != null && (sInstance.statusBarDarkIcon || sInstance.isLightStatusBar());
+    }
+
     public static int getSystemUiVisibilityFlag() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && sInstance != null && (sInstance.statusBarDarkIcon || sInstance.isLightStatusBar())) {
+        if (isUseLightStatusBar()) {
             return View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         } else {
             return 0;
@@ -448,9 +449,9 @@ public class ThemeData {
         return isColorLight(statusBarColor);
     }
 
-    private boolean isColorLight(int color) {
+    public static boolean isColorLight(int color) {
         double lightness = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255;
-        return lightness > 0.8;
+        return lightness > 0.7;
     }
 
     private void scaleRect(Rect rect, float scale) {
@@ -474,7 +475,7 @@ public class ThemeData {
         data.toolbarTextColor = 0xFF222222;
         data.toolbarImageColor = 0xFF444444;
 
-        data.statusBarColor = 0xFFAAAAAA;
+        data.statusBarColor = 0xFF888888;
 
         int padding = context.getResources().getDimensionPixelOffset(R.dimen.dimen_theme_padding);
         Rect paddingRect = new Rect(padding, padding, padding, padding);

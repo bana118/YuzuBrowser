@@ -18,10 +18,12 @@ package jp.hazuki.yuzubrowser.search.presentation.settings
 
 import android.os.Bundle
 import android.view.MenuItem
-import androidx.fragment.app.transaction
+import androidx.fragment.app.commit
+import dagger.hilt.android.AndroidEntryPoint
 import jp.hazuki.yuzubrowser.search.R
 import jp.hazuki.yuzubrowser.ui.app.ThemeActivity
 
+@AndroidEntryPoint
 class SearchUrlListActivity : ThemeActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,7 +31,7 @@ class SearchUrlListActivity : ThemeActivity() {
         setContentView(R.layout.fragment_base)
 
         if (savedInstanceState == null) {
-            supportFragmentManager.transaction {
+            supportFragmentManager.commit {
                 replace(R.id.container, SearchUrlListFragment())
             }
         }

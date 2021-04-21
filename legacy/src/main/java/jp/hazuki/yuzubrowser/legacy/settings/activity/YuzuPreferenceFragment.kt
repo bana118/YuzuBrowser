@@ -27,7 +27,7 @@ import jp.hazuki.yuzubrowser.ui.settings.fragment.YuzuBasePreferenceFragment
 abstract class YuzuPreferenceFragment : YuzuBasePreferenceFragment() {
 
     override fun onDisplayPreferenceDialog(preference: Preference) {
-        val fragmentManager = fragmentManager ?: return
+        val fragmentManager = parentFragmentManager
 
         if (fragmentManager.findFragmentByTag(FRAGMENT_DIALOG_TAG) == null) {
             val dialog: androidx.fragment.app.DialogFragment
@@ -42,7 +42,11 @@ abstract class YuzuPreferenceFragment : YuzuBasePreferenceFragment() {
                 is SearchUrlPreference -> dialog = SearchUrlPreference.PreferenceDialog.newInstance(preference)
                 is NightModePreference -> dialog = NightModePreference.SettingDialog.newInstance(preference)
                 is WebTextSizePreference -> dialog = WebTextSizePreference.SizeDialog.newInstance(preference)
-                is SlowRenderingPreference -> dialog = SlowRenderingPreference.WarningDialog.newInstance(preference)
+                is SlowRenderingPreference -> {
+                    SlowRenderingPreference.WarningDialog.newInstance(preference)
+                        .show(childFragmentManager, "")
+                    return
+                }
                 is CustomDialogPreference -> {
                     preference.show(childFragmentManager)
                     return

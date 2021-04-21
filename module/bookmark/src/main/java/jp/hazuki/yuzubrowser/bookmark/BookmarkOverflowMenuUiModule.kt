@@ -20,20 +20,21 @@ import android.app.Application
 import com.squareup.moshi.Moshi
 import dagger.Module
 import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.components.ActivityRetainedComponent
 import jp.hazuki.yuzubrowser.bookmark.overflow.viewmodel.OverflowMenuViewModel
 import jp.hazuki.yuzubrowser.bookmark.repository.HideMenuRepository
 import jp.hazuki.yuzubrowser.bookmark.repository.HideMenuSource
 
 @Module
-object BookmarkOverflowMenuUiModule {
+@InstallIn(ActivityRetainedComponent::class)
+class BookmarkOverflowMenuUiModule {
 
-    @JvmStatic
     @Provides
     fun provideHideMenuRepository(application: Application, moshi: Moshi): HideMenuRepository {
         return HideMenuSource(application, moshi)
     }
 
-    @JvmStatic
     @Provides
     fun provideOverflowMenuViewModelFactory(application: Application, hideMenuRepository: HideMenuRepository): OverflowMenuViewModel.Factory {
         return OverflowMenuViewModel.Factory(application, hideMenuRepository)

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,15 +17,21 @@
 package jp.hazuki.yuzubrowser.download.core.downloader
 
 import android.content.Context
+import jp.hazuki.yuzubrowser.core.utility.storage.toDocumentFile
 import jp.hazuki.yuzubrowser.download.DOWNLOAD_TMP_FILENAME
 import jp.hazuki.yuzubrowser.download.core.data.DownloadFileInfo
+import jp.hazuki.yuzubrowser.download.core.data.DownloadRequest
 import jp.hazuki.yuzubrowser.download.core.utils.decodeBase64Image
 import jp.hazuki.yuzubrowser.download.core.utils.saveBase64Image
 import java.io.File
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 
-class Base64TmpDownloader(private val context: Context, private val info: DownloadFileInfo) : Downloader {
+class Base64TmpDownloader(
+    private val context: Context,
+    private val info: DownloadFileInfo,
+    private val request: DownloadRequest,
+) : Downloader {
     override var downloadListener: Downloader.DownloadListener? = null
 
     override fun download(): Boolean {
@@ -33,11 +39,17 @@ class Base64TmpDownloader(private val context: Context, private val info: Downlo
         val base64File = File(context.cacheDir, DOWNLOAD_TMP_FILENAME)
         try {
             val base64 = base64File.inputStream().use { it.readBytes().toString(StandardCharsets.UTF_8) }
-            val downloadedFile = context.contentResolver.saveBase64Image(decodeBase64Image(base64), info)
-            if (downloadedFile != null) {
+            val image = decodeBase64Image(base64)
+            val rootFile = info.root.toDocumentFile(context)
+            val file = if (request.isScopedStorageMode) {
+                rootFile
+            } else {
+                rootFile.createFile(image.mimeType, info.name)
+            }
+            if (file != null && context.contentResolver.saveBase64Image(image, file)) {
                 info.state = DownloadFileInfo.STATE_DOWNLOADED
-                info.size = downloadedFile.length()
-                downloadListener?.onFileDownloaded(info, downloadedFile)
+                info.size = file.length()
+                downloadListener?.onFileDownloaded(info, file)
                 return true
             }
         } catch (e: IOException) {

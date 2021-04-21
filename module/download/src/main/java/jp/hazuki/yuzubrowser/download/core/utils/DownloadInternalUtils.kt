@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,36 +22,36 @@ import android.media.MediaScannerConnection
 import android.net.Uri
 import android.text.format.Formatter
 import android.util.Base64
-import android.webkit.MimeTypeMap
 import androidx.documentfile.provider.DocumentFile
+import jp.hazuki.yuzubrowser.core.utility.storage.toDocumentFile
 import jp.hazuki.yuzubrowser.core.utility.utils.FileUtils
 import jp.hazuki.yuzubrowser.core.utility.utils.createUniqueFileName
 import jp.hazuki.yuzubrowser.core.utility.utils.getExtensionFromMimeType
+import jp.hazuki.yuzubrowser.core.utility.utils.getMimeTypeFromExtension
 import jp.hazuki.yuzubrowser.download.TMP_FILE_SUFFIX
 import jp.hazuki.yuzubrowser.download.core.data.DownloadFileInfo
-import java.io.File
 import java.io.IOException
 import java.net.URLDecoder
 import java.util.*
 
-internal fun ContentResolver.saveBase64Image(imageData: Base64Image, info: DownloadFileInfo): DocumentFile? {
+internal fun ContentResolver.saveBase64Image(imageData: Base64Image, file: DocumentFile): Boolean {
     if (imageData.isValid) {
         try {
             val image = Base64.decode(imageData.getData(), Base64.DEFAULT)
-            val file = info.root.createFile(imageData.mimeType, info.name) ?: return null
 
-            openOutputStream(file.uri)!!.use { outputStream ->
+            openOutputStream(file.uri)?.use { outputStream ->
                 outputStream.write(image)
                 outputStream.flush()
+
+                return true
             }
-            return file
         } catch (e: IllegalArgumentException) {
             e.printStackTrace()
         } catch (e: IOException) {
             e.printStackTrace()
         }
     }
-    return null
+    return false
 }
 
 internal fun decodeBase64Image(url: String): Base64Image {
@@ -181,9 +181,8 @@ private fun guessFileName(url: String, contentDisposition: String?, mimeType: St
             // Compare the last segment of the extension against the mime type.
             // If there's a mismatch, discard the entire extension.
             val lastDotIndex = fileName.lastIndexOf('.')
-            val typeFromExt = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
-                    fileName.substring(lastDotIndex + 1))
-            if (typeFromExt != null && !typeFromExt.equals(mimeType, ignoreCase = true)) {
+            val typeFromExt = getMimeTypeFromExtension(fileName.substring(lastDotIndex + 1))
+            if (!typeFromExt.equals(mimeType, ignoreCase = true)) {
                 extension = getExtensionFromMimeType(mimeType)
                 if (extension != null) {
                     extension = ".$extension"
@@ -258,18 +257,20 @@ internal fun DownloadFileInfo.getNotificationString(context: Context): String {
     }
 }
 
-internal fun DownloadFileInfo.getFile(): DocumentFile? =
-        if (state == DownloadFileInfo.STATE_DOWNLOADED) root.findFile(name) else null
-
-internal fun DownloadFileInfo.checkFlag(flag: Int): Boolean = (state and flag) == flag
-
-internal fun Uri.toDocumentFile(context: Context): DocumentFile {
-    return when (scheme) {
-        ContentResolver.SCHEME_CONTENT -> DocumentFile.fromTreeUri(context, this)!!
-        "file" -> DocumentFile.fromFile(File(path))
-        else -> throw IllegalStateException("unknown scheme :$scheme, Uri:$this")
+internal fun DownloadFileInfo.getFile(context: Context): DocumentFile? {
+    return if (state == DownloadFileInfo.STATE_DOWNLOADED) {
+        val file = root.toDocumentFile(context)
+        when {
+            file.isFile -> file
+            file.isDirectory -> file.findFile(name)
+            else -> null
+        }
+    } else {
+        null
     }
 }
+
+internal fun DownloadFileInfo.checkFlag(flag: Int): Boolean = (state and flag) == flag
 
 internal fun Context.registerMediaScanner(vararg path: String) {
     MediaScannerConnection.scanFile(applicationContext, path, null, null)

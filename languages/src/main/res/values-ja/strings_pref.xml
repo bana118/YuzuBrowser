@@ -177,13 +177,6 @@
     <string name="pref_lpress_others">その他</string>
     <string name="pref_clear_data_at_finish">終了時に削除するデータ</string>
     <string name="pref_security_settings">セキュリティ設定</string>
-    <string name="pref_file_access">ローカルアクセス設定</string>
-
-    <string-array name="pref_file_access_list">
-        <item>無効 (安全)</item>
-        <item>サンドボックス内で有効 (微妙)</item>
-        <item>有効 (論外)</item>
-    </string-array>
 
     <string name="pref_mixed_content">https上の安全でないコンテンツ設定</string>
 
@@ -326,6 +319,15 @@
     <string name="pref_number_of_tab_to_cache">メモリに保持するタブ数</string>
     <string name="pref_dark_theme">ダークテーマ</string>
     <string name="pref_light_theme">ライトテーマ</string>
+    <string name="pref_web_theme_mode">Webテーマ</string>
+    <string name="pref_navigation_bar_color">ナビゲーションバーの色</string>
+    <string name="pref_same_as_toolbar">ツールバーと同じ色</string>
+    <string name="pref_same_as_status_bar">ステータスバーと同じ色</string>
+    <string name="black">黒</string>
+    <string name="pref_force_dark_mode">強制ダークモード</string>
+    <string name="pref_force_web_dark_mode">Webテーマ優先強制ダークモード</string>
+    <string name="pref_dark_mode">ダークモード</string>
+    <string name="pref_light_mode">ライトモード</string>
 
     <string-array name="pref_rendering_list">
         <item>標準</item>
@@ -355,9 +357,9 @@
 
     <string name="pref_ad_block">広告ブロック設定</string>
     <string name="pref_ad_block_enable">広告ブロックを有効</string>
-    <string name="pref_ad_block_black">ブラックリスト</string>
-    <string name="pref_ad_block_white">ホワイトリスト</string>
-    <string name="pref_ad_block_white_page">ホワイトページリスト</string>
+    <string name="pref_ad_block_black">ブロックリスト</string>
+    <string name="pref_ad_block_white">許可リスト</string>
+    <string name="pref_ad_block_white_page">信頼するページ</string>
     <string name="exclude_comment">コメント行を除外</string>
     <string name="pref_edit">編集</string>
     <string name="pref_delete">削除</string>
@@ -452,7 +454,6 @@
     <string name="pref_privacy_policy">プライバシーポリシー</string>
     <string name="mining_protect">No Coin</string>
     <string name="mining_protect_summary">仮想通貨のマイニング保護</string>
-    <string name="pref_storage_location_warn">この保存場所は、他のアプリでは正しく連携しない場合があります。</string>
     <string name="pref_fake_chrome">Chromeに偽装する</string>
     <string name="pref_fake_chrome_summary">デフォルトのUserAgentをChromeに偽装する</string>
     <string name="pref_toolbar_small_icon">長押し時のアイコンを表示</string>
@@ -467,4 +468,8 @@
     <string name="pref_bookmark_overflow">アイテムオプション設定</string>
     <string name="pref_page_background_white">ブラウザの背景を白にする</string>
     <string name="pref_page_background_white_info">新しいタブを開くとき、またはタブを切り替えるときにちらつく時は、無効にして下さい。</string>
+    <string name="pref_abp_update_wifi_only">Wi-Fi接続時のみフィルタを更新</string>
+    <string name="pref_ad_block_disable_cosmetic_filtering">要素隠蔽フィルタを無効にする</string>
+    <string name="pref_send_usage">使用統計情報の送信</string>
+    <string name="pref_send_usage_summary">匿名の使用統計情報とクラッシュログの送信を停止するには無効にしてください</string>
 </resources>

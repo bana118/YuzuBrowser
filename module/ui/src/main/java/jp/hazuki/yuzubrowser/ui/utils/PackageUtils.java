@@ -26,10 +26,8 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Parcelable;
 import android.text.TextUtils;
-import android.webkit.URLUtil;
 import android.widget.Toast;
 
 import java.util.ArrayList;
@@ -40,10 +38,8 @@ import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.content.pm.ShortcutManagerCompat;
 import androidx.core.graphics.drawable.IconCompat;
 import jp.hazuki.yuzubrowser.core.utility.utils.ImageUtils;
-import jp.hazuki.yuzubrowser.ui.BrowserApplication;
 import jp.hazuki.yuzubrowser.ui.ConstantsKt;
 import jp.hazuki.yuzubrowser.ui.R;
-import jp.hazuki.yuzubrowser.ui.provider.ISafeFileProvider;
 
 public class PackageUtils {
     private PackageUtils() {
@@ -67,14 +63,8 @@ public class PackageUtils {
 
     public static Intent createChooser(Context context, Intent query, CharSequence title) {
         PackageManager manager = context.getPackageManager();
-        int flag;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            flag = PackageManager.MATCH_ALL;
-        } else {
-            flag = PackageManager.MATCH_DEFAULT_ONLY;
-        }
 
-        List<ResolveInfo> infoList = manager.queryIntentActivities(query, flag);
+        List<ResolveInfo> infoList = manager.queryIntentActivities(query, PackageManager.MATCH_ALL);
         List<Intent> intents = new ArrayList<>();
         String appId = context.getPackageName();
 
@@ -95,12 +85,7 @@ public class PackageUtils {
             intents.add(intent);
         }
 
-        Intent chooser;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M || intents.size() == 0) {
-            chooser = Intent.createChooser(new Intent(), title);
-        } else {
-            chooser = Intent.createChooser(intents.remove(0), title);
-        }
+        Intent chooser = Intent.createChooser(new Intent(), title);
         chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, intents.toArray(new Parcelable[intents.size()]));
         return chooser;
     }
@@ -110,10 +95,6 @@ public class PackageUtils {
             Intent target = new Intent();
             target.setClassName(context, ConstantsKt.ACTIVITY_MAIN_BROWSER);
             target.setAction(Intent.ACTION_VIEW);
-            if (URLUtil.isFileUrl(url)) {
-                ISafeFileProvider provider = ((BrowserApplication)context.getApplicationContext()).getProviderManager().getSafeFileProvider();
-                url = provider.convertToSaferUrl(url);
-            }
             target.setData(Uri.parse(url));
 
             IconCompat icon;

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017-2019 Hazuki
+ * Copyright (C) 2017-2021 Hazuki
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import jp.hazuki.yuzubrowser.webview.listener.OnScrollChangedListener
 import jp.hazuki.yuzubrowser.webview.listener.OnScrollableChangeListener
 import jp.hazuki.yuzubrowser.webview.page.WebViewPage
 import jp.hazuki.yuzubrowser.webview.utility.WebViewUtility
+import jp.hazuki.yuzubrowser.webview.utility.trimForHttpHeader
 
 internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(context), CustomWebView, WebViewUtility {
     protected var id = System.currentTimeMillis()
@@ -51,6 +52,7 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
     private var webLayerType: Int = 0
     private var webLayerPaint: Paint? = null
     override var renderingMode = 0
+    override var isBlock = false
     private var acceptThirdPartyCookies: Boolean = false
     private var verticalScrollBarEnabled: Boolean = false
     private var onScrollChangedListener: OnScrollChangedListener? = null
@@ -79,7 +81,16 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
 
     internal abstract fun removeCurrentTab(tab: WebViewPage)
     internal abstract fun resetCurrentTab(): WebViewPage
-    protected abstract fun newTab(url: String, additionalHttpHeaders: Map<String, String> = emptyMap)
+    protected abstract fun createTab(url: String, additionalHttpHeaders: Map<String, String>)
+
+    protected fun newTab(url: String, additionalHttpHeaders: Map<String, String> = emptyMap) {
+        val current = currentPage.webView
+        // partial support remove history
+        if (current.canGoForward() && !current.canGoBack()) {
+            current.clearHistory()
+        }
+        createTab(url, additionalHttpHeaders)
+    }
 
     override fun clearCache(includeDiskFiles: Boolean) {
         for (web in tabs) {
@@ -149,26 +160,25 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
         move(from, to)
     }
 
-    override fun loadUrl(url: String?) {
+    override fun loadUrl(url: String) {
         when {
             isFirst -> {
                 isFirst = false
                 currentPage.webView.loadUrl(url)
             }
-            url != null && url.shouldLoadSameTabUser() -> currentPage.webView.loadUrl(url)
-            url != null -> newTab(url)
+            url.shouldLoadSameTabUser() -> currentPage.webView.loadUrl(url)
+            else -> newTab(url)
         }
     }
 
-    override fun loadUrl(url: String?, additionalHttpHeaders: MutableMap<String, String>?) {
+    override fun loadUrl(url: String, additionalHttpHeaders: MutableMap<String, String>) {
         when {
             isFirst -> {
                 isFirst = false
                 currentPage.webView.loadUrl(url, additionalHttpHeaders)
             }
-            url != null && url.shouldLoadSameTabUser() -> currentPage.webView.loadUrl(url, additionalHttpHeaders)
-            url != null && additionalHttpHeaders != null -> newTab(url, additionalHttpHeaders)
-            url != null -> newTab(url, additionalHttpHeaders ?: emptyMap)
+            url.shouldLoadSameTabUser() -> currentPage.webView.loadUrl(url, additionalHttpHeaders)
+            else -> newTab(url, additionalHttpHeaders)
         }
     }
 
@@ -195,7 +205,7 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
         currentPage.webView.findAllAsync(find)
     }
 
-    override fun setFindListener(listener: WebView.FindListener) {
+    override fun setFindListener(listener: WebView.FindListener?) {
         currentPage.webView.setFindListener(listener)
     }
 
@@ -232,7 +242,10 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
     override val url: String?
         get() = currentPage.webView.url
 
-    override fun evaluateJavascript(js: String?, callback: ValueCallback<String>?) {
+    override val canPullToRefresh: Boolean
+        get() = currentPage.webView.canPullToRefresh
+
+    override fun evaluateJavascript(js: String, callback: ValueCallback<String>?) {
         currentPage.webView.evaluateJavascript(js, callback)
     }
 
@@ -263,7 +276,7 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
 
     override fun requestWebFocus(): Boolean = currentPage.webView.requestWebFocus()
 
-    override fun requestFocusNodeHref(hrefMsg: Message) {
+    override fun requestFocusNodeHref(hrefMsg: Message?) {
         currentPage.webView.requestFocusNodeHref(hrefMsg)
     }
 
@@ -302,7 +315,7 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
         }
     }
 
-    override fun setMyWebViewClient(client: CustomWebViewClient?) {
+    override fun setMyWebViewClient(client: CustomWebViewClient) {
         webViewClientWrapper.setWebViewClient(client)
         for (web in tabs) {
             web.webView.setMyWebViewClient(webViewClientWrapper)
@@ -397,26 +410,25 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
             currentPage.webView.computeVerticalScrollExtentMethod()
 
     override fun computeHorizontalScrollRangeMethod(): Int =
-            currentPage.webView.computeHorizontalScrollRangeMethod()
+        currentPage.webView.computeHorizontalScrollRangeMethod()
 
     override fun computeHorizontalScrollOffsetMethod(): Int =
-            currentPage.webView.computeHorizontalScrollOffsetMethod()
+        currentPage.webView.computeHorizontalScrollOffsetMethod()
 
     override fun computeHorizontalScrollExtentMethod(): Int =
-            currentPage.webView.computeHorizontalScrollExtentMethod()
+        currentPage.webView.computeHorizontalScrollExtentMethod()
 
-    override fun createPrintDocumentAdapter(documentName: String?): PrintDocumentAdapter? =
-            currentPage.webView.createPrintDocumentAdapter(documentName)
+    override fun createPrintDocumentAdapter(documentName: String): PrintDocumentAdapter =
+        currentPage.webView.createPrintDocumentAdapter(documentName)
 
-    override fun loadDataWithBaseURL(baseUrl: String, data: String, mimeType: String, encoding: String, historyUrl: String) {
+    override fun loadDataWithBaseURL(baseUrl: String?, data: String, mimeType: String?, encoding: String?, historyUrl: String?) {
         currentPage.webView.loadDataWithBaseURL(baseUrl, data, mimeType, encoding, historyUrl)
     }
 
-    override var identityId: Long
-        get() = id
+    override var identityId: Long = System.currentTimeMillis()
         set(value) {
-            if (id > value) {
-                id = value
+            if (field > value) {
+                field = value
             }
         }
 
@@ -494,7 +506,6 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
         toSetting.domStorageEnabled = fromSetting.domStorageEnabled
 
         toSetting.allowContentAccess = fromSetting.allowContentAccess
-        toSetting.allowFileAccess = fromSetting.allowFileAccess
         toSetting.mixedContentMode = fromSetting.mixedContentMode
         toSetting.defaultTextEncodingName = fromSetting.defaultTextEncodingName
         toSetting.userAgentString = fromSetting.userAgentString
@@ -504,6 +515,7 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
         toSetting.cacheMode = fromSetting.cacheMode
         toSetting.javaScriptCanOpenWindowsAutomatically = fromSetting.javaScriptCanOpenWindowsAutomatically
         toSetting.layoutAlgorithm = fromSetting.layoutAlgorithm
+        toSetting.webTheme = fromSetting.webTheme
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             toSetting.safeBrowsingEnabled = fromSetting.safeBrowsingEnabled
         } else {
@@ -569,10 +581,6 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
         }
     }
 
-    override fun setSwipeable(swipeable: Boolean) {
-        currentPage.webView.setSwipeable(swipeable)
-    }
-
     override fun setScrollableHeight(listener: (() -> Int)?) {
         scrollableHeight = listener
         for (web in tabs) {
@@ -590,7 +598,7 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
             cachedMap.putAll(this)
         }
 
-        if (referrer != null) cachedMap["Referer"] = referrer
+        if (referrer != null) cachedMap["Referer"] = trimForHttpHeader(referrer)
         return cachedMap
     }
 
@@ -600,13 +608,20 @@ internal abstract class AbstractCacheWebView(context: Context) : FrameLayout(con
 
     protected fun getReferrerMap(referrer: String?): MutableMap<String, String> {
         if (referrer == null) return mutableEmptyMap
-        referrerMap["Referer"] = referrer
+        referrerMap["Referer"] = trimForHttpHeader(referrer)
 
         return referrerMap
     }
 
+
+    override fun onPageDocumentStart() {
+        currentPage.webView.onPageDocumentStart()
+    }
+
+
     companion object {
         private val mutableEmptyMap = ArrayMap<String, String>()
+
         @JvmStatic
         protected val emptyMap: Map<String, String>
             get() = mutableEmptyMap
